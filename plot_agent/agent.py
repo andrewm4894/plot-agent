@@ -160,19 +160,29 @@ class PlotAgent:
             Tool.from_function(
                 func=self.execute_plotly_code,
                 name="execute_plotly_code",
-                description="Execute the provided Plotly code and return a result indicating if the code executed successfully and if a figure object was created.",
+                description=(
+                    "Execute the provided Plotly code and return a result indicating "
+                    "if the code executed successfully and if a figure object was created."
+                ),
                 args_schema=GeneratedCodeInput,
             ),
             StructuredTool.from_function(
                 func=self.does_fig_exist,
                 name="does_fig_exist",
-                description="Check if a figure exists and is available for display. This tool takes no arguments and returns a string indicating if a figure is available for display or not.",
+                description=(
+                    "Check if a figure exists and is available for display. "
+                    "This tool takes no arguments and returns a string indicating "
+                    "if a figure is available for display or not."
+                ),
                 args_schema=DoesFigExistInput,
             ),
             StructuredTool.from_function(
                 func=self.view_generated_code,
                 name="view_generated_code",
-                description="View the generated code. This tool takes no arguments and returns the generated code as a string.",
+                description=(
+                    "View the generated code. "
+                    "This tool takes no arguments and returns the generated code as a string."
+                ),
                 args_schema=ViewGeneratedCodeInput,
             ),
         ]
