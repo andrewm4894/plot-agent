@@ -21,7 +21,7 @@ Here's a simple minimal example of how to use Plot Agent:
 
 ```python
 import pandas as pd
-from plot_agent.agent import PlotlyAgent
+from plot_agent.agent import PlotAgent
 
 # ensure OPENAI_API_KEY is set and available for langchain
 
@@ -32,7 +32,7 @@ df = pd.DataFrame({
 })
 
 # Initialize the agent
-agent = PlotlyAgent()
+agent = PlotAgent()
 
 # Set the dataframe
 agent.set_df(df)

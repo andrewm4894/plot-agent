@@ -14,10 +14,10 @@ from plot_agent.models import (
     DoesFigExistInput,
     ViewGeneratedCodeInput,
 )
-from plot_agent.execution import PlotlyAgentExecutionEnvironment
+from plot_agent.execution import PlotAgentExecutionEnvironment
 
 
-class PlotlyAgent:
+class PlotAgent:
     """
     A class that uses an LLM to generate Plotly code based on a user's plot description.
     """
@@ -32,7 +32,7 @@ class PlotlyAgent:
         handle_parsing_errors: bool = True,
     ):
         """
-        Initialize the PlotlyAgent.
+        Initialize the PlotAgent.
 
         Args:
             model (str): The model to use for the LLM.
@@ -90,7 +90,7 @@ class PlotlyAgent:
         self.sql_query = sql_query
 
         # Initialize execution environment
-        self.execution_env = PlotlyAgentExecutionEnvironment(df)
+        self.execution_env = PlotAgentExecutionEnvironment(df)
 
         # Initialize the agent with tools
         self._initialize_agent()

@@ -10,7 +10,7 @@ from plotly.subplots import make_subplots
 from typing import Dict, Any
 
 
-class PlotlyAgentExecutionEnvironment:
+class PlotAgentExecutionEnvironment:
     """
     Environment to safely execute plotly code and capture the fig object.
 

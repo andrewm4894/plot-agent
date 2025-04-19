@@ -1,13 +1,13 @@
 import pytest
 import pandas as pd
 import numpy as np
-from plot_agent.agent import PlotlyAgent
+from plot_agent.agent import PlotAgent
 from langchain_core.messages import HumanMessage, AIMessage
 
 
 def test_plotly_agent_initialization():
-    """Test that PlotlyAgent initializes correctly."""
-    agent = PlotlyAgent()
+    """Test that PlotAgent initializes correctly."""
+    agent = PlotAgent()
     assert agent.llm is not None
     assert agent.df is None
     assert agent.df_info is None
@@ -24,7 +24,7 @@ def test_set_df():
     # Create a sample dataframe
     df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
 
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     agent.set_df(df)
 
     assert agent.df is not None
@@ -38,7 +38,7 @@ def test_execute_plotly_code():
     """Test that execute_plotly_code works with valid code."""
     df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
 
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     agent.set_df(df)
 
     # Test with valid plotly code
@@ -54,7 +54,7 @@ def test_execute_plotly_code_with_error():
     """Test that execute_plotly_code handles errors properly."""
     df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
 
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     agent.set_df(df)
 
     # Test with invalid code
@@ -70,7 +70,7 @@ def test_does_fig_exist():
     """Test that does_fig_exist correctly reports figure existence."""
     df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
 
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     agent.set_df(df)
 
     # Initially no figure should exist
@@ -87,7 +87,7 @@ fig = px.scatter(df, x='x', y='y')"""
 
 def test_reset_conversation():
     """Test that reset_conversation clears the chat history."""
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     agent.chat_history = ["message1", "message2"]
     agent.reset_conversation()
     assert agent.chat_history == []
@@ -95,7 +95,7 @@ def test_reset_conversation():
 
 def test_view_generated_code():
     """Test that view_generated_code returns the last generated code."""
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     test_code = "test code"
     agent.generated_code = test_code
     assert agent.view_generated_code() == test_code
@@ -105,7 +105,7 @@ def test_get_figure():
     """Test that get_figure returns the current figure if it exists."""
     df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
 
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     agent.set_df(df)
 
     # Initially no figure should exist
@@ -124,7 +124,7 @@ def test_process_message():
     """Test that process_message updates chat history and handles responses."""
     df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
 
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     agent.set_df(df, sql_query="SELECT x, y FROM df")
 
     # Test processing a message
@@ -139,7 +139,7 @@ def test_process_message():
 
 def test_execute_plotly_code_without_df():
     """Test that execute_plotly_code handles the case when no dataframe is set."""
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     result = agent.execute_plotly_code("some code")
     assert "Error" in result and "No dataframe has been set" in result
 
@@ -149,7 +149,7 @@ def test_set_df_with_sql_query():
     df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
 
     sql_query = "SELECT x, y FROM table"
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     agent.set_df(df, sql_query=sql_query)
 
     assert agent.sql_query == sql_query
@@ -158,32 +158,32 @@ def test_set_df_with_sql_query():
 def test_agent_initialization_with_custom_prompt():
     """Test agent initialization with custom system prompt."""
     custom_prompt = "Custom system prompt for testing"
-    agent = PlotlyAgent(system_prompt=custom_prompt)
+    agent = PlotAgent(system_prompt=custom_prompt)
     assert agent.system_prompt == custom_prompt
 
 
 def test_agent_initialization_with_different_model():
     """Test agent initialization with different model names."""
-    agent = PlotlyAgent(model="gpt-3.5-turbo")
+    agent = PlotAgent(model="gpt-3.5-turbo")
     assert agent.llm.model_name == "gpt-3.5-turbo"
 
 
 def test_agent_initialization_with_verbose():
     """Test agent initialization with verbose settings."""
-    agent = PlotlyAgent(verbose=False)
+    agent = PlotAgent(verbose=False)
     assert agent.verbose == False
     assert agent.agent_executor is None  # Agent executor not initialized yet
 
 
 def test_agent_initialization_with_max_iterations():
     """Test agent initialization with different max iterations."""
-    agent = PlotlyAgent(max_iterations=5)
+    agent = PlotAgent(max_iterations=5)
     assert agent.max_iterations == 5
 
 
 def test_agent_initialization_with_early_stopping():
     """Test agent initialization with different early stopping methods."""
-    agent = PlotlyAgent(early_stopping_method="generate")
+    agent = PlotAgent(early_stopping_method="generate")
     assert agent.early_stopping_method == "generate"
 
 
@@ -191,7 +191,7 @@ def test_process_empty_message():
     """Test processing of empty messages."""
     df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
 
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     agent.set_df(df)
 
     response = agent.process_message("")
@@ -204,7 +204,7 @@ def test_process_message_with_code_blocks():
     """Test processing messages that contain code blocks."""
     df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
 
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     agent.set_df(df)
 
     message = "Here's some code:\n```python\nprint('test')\n```"
@@ -223,7 +223,7 @@ def test_execution_environment_with_different_plot_types():
         }
     )
 
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     agent.set_df(df)
 
     # Test scatter plot
@@ -254,7 +254,7 @@ def test_execution_environment_with_subplots():
         {"x": [1, 2, 3, 4, 5], "y1": [10, 20, 30, 40, 50], "y2": [50, 40, 30, 20, 10]}
     )
 
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     agent.set_df(df)
 
     subplot_code = """import plotly.subplots as sp
@@ -272,7 +272,7 @@ def test_execution_environment_with_data_preprocessing():
     """Test execution environment with data preprocessing steps."""
     df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
 
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     agent.set_df(df)
 
     preprocessing_code = """import plotly.express as px
@@ -289,7 +289,7 @@ def test_handle_syntax_error():
     """Test handling of syntax errors in generated code."""
     df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
 
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     agent.set_df(df)
 
     invalid_code = """import plotly.express as px
@@ -305,7 +305,7 @@ def test_handle_runtime_error():
     """Test handling of runtime errors in generated code."""
     df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
 
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     agent.set_df(df)
 
     error_code = """import plotly.express as px
@@ -320,7 +320,7 @@ def test_tool_interaction():
     """Test interaction between different tools."""
     df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
 
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     agent.set_df(df)
 
     # First check if figure exists (should not)
@@ -343,7 +343,7 @@ def test_tool_validation():
     """Test validation of tool inputs."""
     df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
 
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     agent.set_df(df)
 
     # Test with invalid code (empty string)
@@ -359,7 +359,7 @@ def test_tool_response_formatting():
     """Test formatting of tool responses."""
     df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
 
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     agent.set_df(df)
 
     # Test execute_plotly_code response format
@@ -384,7 +384,7 @@ def test_memory_cleanup():
     """Test memory cleanup after multiple plot generations."""
     df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
 
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     agent.set_df(df)
 
     # Generate multiple plots
@@ -406,7 +406,7 @@ def test_large_dataframe_handling():
     # Create a large dataframe
     df = pd.DataFrame({"x": range(10000), "y": range(10000)})
 
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     agent.set_df(df)
 
     # Test plot generation with large dataframe
@@ -421,12 +421,12 @@ def test_input_validation():
     """Test validation of input parameters."""
     # Test invalid dataframe input
     with pytest.raises(AssertionError):
-        agent = PlotlyAgent()
+        agent = PlotAgent()
         agent.set_df("not a dataframe")
 
     # Test invalid SQL query input
     df = pd.DataFrame({"x": [1, 2, 3]})
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     with pytest.raises(AssertionError):
         agent.set_df(df, sql_query=123)  # SQL query should be string
 
@@ -451,7 +451,7 @@ def test_complex_plot_handling():
         }
     )
 
-    agent = PlotlyAgent()
+    agent = PlotAgent()
     agent.set_df(df)
 
     complex_code = """import plotly.graph_objects as go
