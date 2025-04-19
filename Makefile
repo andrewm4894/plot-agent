@@ -1,6 +1,6 @@
 .PHONY: publish test clean
 
-publish:
+publish: clean test
 	@echo "Building distribution files..."
 	python -m build
 	@echo "Uploading to PyPI..."

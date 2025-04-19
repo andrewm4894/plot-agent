@@ -7,88 +7,21 @@ from plotly.subplots import make_subplots
 from io import StringIO
 import traceback
 import sys
-from typing import Dict, List, Optional, Any
+from typing import Dict, Optional, Any
 
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.tools import Tool, StructuredTool
 from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain_openai import ChatOpenAI
+
 from plot_agent.prompt import DEFAULT_SYSTEM_PROMPT
 from plot_agent.models import (
     GeneratedCodeInput,
     DoesFigExistInput,
     ViewGeneratedCodeInput,
 )
-
-
-class PlotlyAgentExecutionEnvironment:
-    """Environment to safely execute plotly code and capture the fig object."""
-
-    def __init__(self, df: pd.DataFrame):
-        self.df = df
-        self.locals_dict = {
-            "df": df,
-            "px": px,
-            "go": go,
-            "pd": pd,
-            "np": np,
-            "plt": plt,
-            "make_subplots": make_subplots,
-        }
-        self.output = None
-        self.error = None
-        self.fig = None
-
-    def execute_code(self, generated_code: str) -> Dict[str, Any]:
-        """
-        Execute the provided code and capture the fig object if created.
-
-        Args:
-            generated_code (str): The code to execute.
-
-        Returns:
-            Dict[str, Any]: A dictionary containing the fig object, output, error, and success status.
-        """
-        self.output = None
-        self.error = None
-
-        # Capture stdout
-        old_stdout = sys.stdout
-        sys.stdout = mystdout = StringIO()
-
-        try:
-            # Execute the code
-            exec(generated_code, globals(), self.locals_dict)
-
-            # Check if a fig object was created
-            if "fig" in self.locals_dict:
-                self.fig = self.locals_dict["fig"]
-                self.output = "Code executed successfully. 'fig' object was created."
-            else:
-                print(f"no fig object created: {generated_code}")
-                self.error = "Code executed without errors, but no 'fig' object was created. Make sure your code creates a variable named 'fig'."
-
-        except Exception as e:
-            self.error = f"Error executing code: {str(e)}\n{traceback.format_exc()}"
-
-        finally:
-            # Restore stdout
-            sys.stdout = old_stdout
-            captured_output = mystdout.getvalue()
-
-            if captured_output.strip():
-                if self.output:
-                    self.output += f"\nOutput:\n{captured_output}"
-                else:
-                    self.output = f"Output:\n{captured_output}"
-
-        return {
-            "fig": self.fig,
-            "output": self.output,
-            "error": self.error,
-            "success": self.error is None and self.fig is not None,
-        }
+from plot_agent.execution import PlotlyAgentExecutionEnvironment
 
 
 class PlotlyAgent:
