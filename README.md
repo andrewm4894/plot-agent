@@ -1,5 +1,8 @@
 # Plot Agent
 
+[![Tests](https://github.com/andrewm4894/plot-agent/actions/workflows/test.yml/badge.svg)](https://github.com/andrewm4894/plot-agent/actions/workflows/test.yml)
+[![PyPI version](https://badge.fury.io/py/plot-agent.svg)](https://badge.fury.io/py/plot-agent)
+
 An AI-powered data visualization assistant that helps users create Plotly visualizations in Python.
 
 ## Installation
