@@ -1,7 +1,7 @@
 import pytest
 import pandas as pd
 import numpy as np
-from plot_agent.plotly_agent import PlotlyAgent
+from plot_agent.agent import PlotlyAgent
 from langchain_core.messages import HumanMessage, AIMessage
 
 def test_plotly_agent_initialization():
