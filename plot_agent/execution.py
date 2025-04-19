@@ -11,9 +11,20 @@ from typing import Dict, Any
 
 
 class PlotlyAgentExecutionEnvironment:
-    """Environment to safely execute plotly code and capture the fig object."""
+    """
+    Environment to safely execute plotly code and capture the fig object.
+
+    Args:
+        df (pd.DataFrame): The dataframe to use for the execution environment.
+    """
 
     def __init__(self, df: pd.DataFrame):
+        """
+        Initialize the execution environment with the given dataframe.
+
+        Args:
+            df (pd.DataFrame): The dataframe to use for the execution environment.
+        """
         self.df = df
         self.locals_dict = {
             "df": df,

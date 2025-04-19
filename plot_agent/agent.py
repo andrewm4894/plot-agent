@@ -68,6 +68,14 @@ class PlotlyAgent:
         Returns:
             None
         """
+
+        # Check df
+        assert isinstance(df, pd.DataFrame), "The dataframe must be a pandas dataframe."
+        assert not df.empty, "The dataframe must not be empty."
+
+        if sql_query:
+            assert isinstance(sql_query, str), "The SQL query must be a string."
+
         self.df = df
 
         # Capture df.info() output
@@ -97,18 +105,27 @@ class PlotlyAgent:
         Returns:
             str: The result of the execution.
         """
+        assert isinstance(generated_code, str), "The generated code must be a string."
+
         if not self.execution_env:
             return "Error: No dataframe has been set. Please set a dataframe first."
 
         # Store this as the last generated code
         self.generated_code = generated_code
 
-        result = self.execution_env.execute_code(generated_code)
+        # Execute the generated code
+        code_execution_result = self.execution_env.execute_code(generated_code)
 
-        if result["success"]:
-            return f"Code executed successfully! A figure object was created.\n{result.get('output', '')}"
+        # Extract the results from the code execution
+        code_execution_success = code_execution_result.get("success", False)
+        code_execution_output = code_execution_result.get("output", "")
+        code_execution_error = code_execution_result.get("error", "")
+
+        # Check if the code executed successfully
+        if code_execution_success:
+            return f"Code executed successfully! A figure object was created.\n{code_execution_output}"
         else:
-            return f"Error: {result.get('error', 'Unknown error')}\n{result.get('output', '')}"
+            return f"Error: {code_execution_error}\n{code_execution_output}"
 
     def does_fig_exist(self, *args, **kwargs) -> str:
         """
@@ -137,23 +154,25 @@ class PlotlyAgent:
 
     def _initialize_agent(self):
         """Initialize the LangChain agent with the necessary tools and prompt."""
+
+        # Initialize the tools
         tools = [
             Tool.from_function(
                 func=self.execute_plotly_code,
                 name="execute_plotly_code",
-                description="Execute the provided Plotly code and return the result",
+                description="Execute the provided Plotly code and return a result indicating if the code executed successfully and if a figure object was created.",
                 args_schema=GeneratedCodeInput,
             ),
             StructuredTool.from_function(
                 func=self.does_fig_exist,
                 name="does_fig_exist",
-                description="Check if a figure exists and is available for display. This tool takes no arguments.",
+                description="Check if a figure exists and is available for display. This tool takes no arguments and returns a string indicating if a figure is available for display or not.",
                 args_schema=DoesFigExistInput,
             ),
             StructuredTool.from_function(
                 func=self.view_generated_code,
                 name="view_generated_code",
-                description="View the generated code.",
+                description="View the generated code. This tool takes no arguments and returns the generated code as a string.",
                 args_schema=ViewGeneratedCodeInput,
             ),
         ]
@@ -191,6 +210,8 @@ class PlotlyAgent:
 
     def process_message(self, user_message: str) -> str:
         """Process a user message and return the agent's response."""
+        assert isinstance(user_message, str), "The user message must be a string."
+
         if not self.agent_executor:
             return "Please set a dataframe first using set_df() method."
 
@@ -231,3 +252,4 @@ class PlotlyAgent:
     def reset_conversation(self):
         """Reset the conversation history."""
         self.chat_history = []
+        self.generated_code = None

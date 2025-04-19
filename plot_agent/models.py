@@ -1,14 +1,17 @@
 from pydantic import BaseModel, Field
 
 
-# Define input schemas for the tools
 class PlotDescriptionInput(BaseModel):
+    """Model indicating that the plot_description function takes a plot_description argument."""
+
     plot_description: str = Field(
         ..., description="Description of the plot the user wants to create"
     )
 
 
 class GeneratedCodeInput(BaseModel):
+    """Model indicating that the generated_code function takes a generated_code argument."""
+
     generated_code: str = Field(
         ..., description="Python code that creates a Plotly figure"
     )
