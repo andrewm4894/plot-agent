@@ -5,7 +5,7 @@ from typing import Optional
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.tools import Tool, StructuredTool
-from langchain.agents import AgentExecutor, create_openai_tools_agent
+from langchain.agents import AgentExecutor, create_react_agent
 from langchain_openai import ChatOpenAI
 
 from plot_agent.prompt import DEFAULT_SYSTEM_PROMPT
@@ -99,6 +99,9 @@ class PlotlyAgent:
         """
         if not self.execution_env:
             return "Error: No dataframe has been set. Please set a dataframe first."
+        
+        # clean the generated code
+        generated_code = generated_code.replace("```python", "").replace("```", "")
 
         # Store this as the last generated code
         self.generated_code = generated_code
@@ -163,23 +166,39 @@ class PlotlyAgent:
         if self.sql_query:
             sql_context = f"In case it is useful to help with the data understanding, the df was generated using the following SQL query:\n```sql\n{self.sql_query}\n```"
 
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                (
-                    "system",
-                    self.system_prompt.format(
-                        df_info=self.df_info,
-                        df_head=self.df_head,
-                        sql_context=sql_context,
-                    ),
-                ),
-                MessagesPlaceholder(variable_name="chat_history"),
-                ("human", "{input}"),
-                MessagesPlaceholder(variable_name="agent_scratchpad"),
-            ]
-        )
+        # Create the ReAct prompt template
+        template = """Answer the following questions as best you can. You have access to the following tools:
 
-        agent = create_openai_tools_agent(self.llm, tools, prompt)
+        {tools}
+
+        Use the following format:
+
+        Question: the input question you must answer
+        Thought: you should always think about what to do
+        Action: the action to take, should be one of [{tool_names}]
+        Action Input: the input to the action
+        Observation: the result of the action
+        ... (this Thought/Action/Action Input/Observation can repeat N times)
+        Thought: I now know the final answer
+        Final Answer: the final answer to the original input question
+
+        Begin!
+
+        Question: {input}"""
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", self.system_prompt.format(
+                df_info=self.df_info,
+                df_head=self.df_head,
+                sql_context=sql_context,
+            )),
+            MessagesPlaceholder(variable_name="chat_history"),
+            ("human", template),
+            ("ai", "{agent_scratchpad}"),
+            #MessagesPlaceholder(variable_name="agent_scratchpad"),
+        ])
+
+        agent = create_react_agent(self.llm, tools, prompt)
         self.agent_executor = AgentExecutor(
             agent=agent,
             tools=tools,
@@ -200,9 +219,16 @@ class PlotlyAgent:
         # Reset generated_code
         self.generated_code = None
 
+        # Initialize agent_scratchpad as a list of messages
+        agent_scratchpad = []
+
         # Get response from agent
         response = self.agent_executor.invoke(
-            {"input": user_message, "chat_history": self.chat_history}
+            {
+                "input": user_message,
+                "chat_history": self.chat_history,
+                "agent_scratchpad": agent_scratchpad
+            }
         )
 
         # Add agent response to chat history
@@ -211,13 +237,6 @@ class PlotlyAgent:
         # If the agent didn't execute the code, but did generate code, execute it directly
         if self.execution_env.fig is None and self.generated_code is not None:
             self.execution_env.execute_code(self.generated_code)
-
-        # If we can extract code from the response when no code was executed, try that too
-        if self.execution_env.fig is None and "```python" in response["output"]:
-            code_blocks = response["output"].split("```python")
-            if len(code_blocks) > 1:
-                generated_code = code_blocks[1].split("```")[0].strip()
-                self.execution_env.execute_code(generated_code)
 
         # Return the agent's response
         return response["output"]
