@@ -15,12 +15,15 @@ pip install plot-agent
 
 ## Usage
 
-Here's a simple example of how to use Plot Agent:
+See more examples in [/examples/](./examples/).
+
+Here's a simple minimal example of how to use Plot Agent:
 
 ```python
 import pandas as pd
 from plot_agent.plotly_agent import PlotlyAgent
 
+# ensure OPENAI_API_KEY is set and available for langchain
 
 # Create a sample dataframe
 df = pd.DataFrame({
@@ -36,8 +39,43 @@ agent.set_df(df)
 
 # Process a visualization request
 response = agent.process_message("Create a line plot of x vs y")
+
+# Print generated code
+print(agent.generated_code)
+
+# Get fig
 fig = agent.get_figure()
 fig.show()
+```
+
+`agent.generated_code`:
+
+```python
+import pandas as pd
+import plotly.graph_objects as go
+
+# Creating a line plot of x vs y
+# Create a figure object
+fig = go.Figure()
+
+# Add a line trace to the figure
+fig.add_trace(
+    go.Scatter(
+        x=df['x'],  # The x values
+        y=df['y'],  # The y values
+        mode='lines+markers',  # Display both lines and markers
+        name='Line Plot',  # Name of the trace
+        line=dict(color='blue', width=2)  # Specify line color and width
+    )
+)
+
+# Adding titles and labels
+fig.update_layout(
+    title='Line Plot of x vs y',  # Plot title
+    xaxis_title='x',  # x-axis label
+    yaxis_title='y',  # y-axis label
+    template='plotly_white'  # A clean layout
+)
 ```
 
 ## Features
