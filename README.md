@@ -15,7 +15,7 @@ pip install plot-agent
 
 ## Usage
 
-See more examples in [/examples/](https://nbviewer.org/github/andrewm4894/plot-agent/tree/main/examples/) (via NBViewer so that can see the charts easily).
+See more examples in [/examples/](https://nbviewer.org/github/andrewm4894/plot-agent/tree/main/examples/) (via nbviewer so that can see the charts easily).
 
 Here's a simple minimal example of how to use Plot Agent:
 
