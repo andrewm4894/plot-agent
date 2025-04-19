@@ -16,7 +16,8 @@ Here's a simple example of how to use Plot Agent:
 
 ```python
 import pandas as pd
-from plot_agent import PlotlyAgent
+from plot_agent.plotly_agent import PlotlyAgent
+
 
 # Create a sample dataframe
 df = pd.DataFrame({
@@ -32,6 +33,8 @@ agent.set_df(df)
 
 # Process a visualization request
 response = agent.process_message("Create a line plot of x vs y")
+fig = agent.get_figure()
+fig.show()
 ```
 
 ## Features

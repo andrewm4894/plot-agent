@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Any
 
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.tools import Tool
+from langchain_core.tools import Tool, StructuredTool
 from pydantic import BaseModel, Field
 from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain_openai import ChatOpenAI
@@ -38,29 +38,37 @@ df.head():
 {sql_context}
 
 NOTES:
-- You must use the execute_plotly_code(generated_code) tool to test and run your code
-- You must paste the full code, not just a reference to the code
-- You must not use fig.show() in your code as it will be executed in a headless environment
-- If you need to do any data cleaning or wrangling, do it in the code before generating the plotly code as preprocessing steps assume the data is in the pandas df object
-- Do not use fig.show() in your code as it will be executed in a headless environment.
+- You must use the execute_plotly_code(generated_code) tool run your code and use the does_fig_exist() tool to check that a fig object is available for display.
+- You must paste the full code, not just a reference to the code.
+- You must not use fig.show() in your code as it will ultimately be executed elsewhere in a headless environment.
+- If you need to do any data cleaning or wrangling, do it in the code before generating the plotly code as preprocessing steps assume the data is in the pandas 'df' object.
+
+TOOLS:
+- execute_plotly_code(generated_code) to execute the generated code.
+- does_fig_exist() to check that a fig object is available for display. This tool takes no arguments.
+- view_generated_code() to view the generated code if need to fix it. This tool takes no arguments.
 
 IMPORTANT CODE FORMATTING INSTRUCTIONS:
-1. Include thorough, detailed comments in your code to explain what each section does
-2. Use descriptive variable names
-3. DO NOT include fig.show() in your code - the visualization will be rendered externally
-4. Ensure your code creates a variable named 'fig' that contains the Plotly figure object
-5. Structure your code with proper spacing for readability
+1. Include thorough, detailed comments in your code to explain what each section does.
+2. Use descriptive variable names.
+3. DO NOT include fig.show() in your code - the visualization will be rendered externally.
+4. Ensure your code creates a variable named 'fig' that contains the Plotly figure object.
 
 When a user asks for a visualization:
-1. YOU MUST ALWAYS use the execute_plotly_code(generated_code) tool to test and run your code
-2. If there are errors, fix the code and run it again with execute_plotly_code(generated_code)
+1. YOU MUST ALWAYS use the execute_plotly_code(generated_code) tool to test and run your code.
+2. If there are errors, view the generated code using view_generated_code() and fix the code.
 3. Check that a figure object is available using does_fig_exist(). does_fig_exist() takes no arguments.
+4. If the figure object is not available, repeat the process until it is available.
 
 IMPORTANT: The code you generate MUST be executed using the execute_plotly_code tool or no figure will be created!
 YOU MUST CALL execute_plotly_code WITH THE FULL CODE, NOT JUST A REFERENCE TO THE CODE.
 
 YOUR WORKFLOW MUST BE:
-1. execute_plotly_code(generated_code) → 2. check that a figure object is available using does_fig_exist() → 3. (if needed) fix and execute again
+1. execute_plotly_code(generated_code) to make sure the code is ran and a figure object is created.
+2. check that a figure object is available using does_fig_exist() to make sure the figure object was created.
+3. if there are errors, view the generated code using view_generated_code() to see what went wrong.
+4. fix the code and execute it again with execute_plotly_code(generated_code) to make sure the figure object is created.
+5. repeat until the figure object is available.
 
 Always return the final working code (with all the comments) to the user along with an explanation of what the visualization shows.
 Make sure to follow best practices for data visualization, such as appropriate chart types, labels, and colors.
@@ -82,6 +90,18 @@ class GeneratedCodeInput(BaseModel):
     )
 
 
+class DoesFigExistInput(BaseModel):
+    """Model indicating that the does_fig_exist function takes no arguments."""
+
+    pass
+
+
+class ViewGeneratedCodeInput(BaseModel):
+    """Model indicating that the view_generated_code function takes no arguments."""
+
+    pass
+
+
 class PlotlyAgentExecutionEnvironment:
     """Environment to safely execute plotly code and capture the fig object."""
 
@@ -100,13 +120,6 @@ class PlotlyAgentExecutionEnvironment:
         self.error = None
         self.fig = None
 
-    def preprocess_code(self, generated_code: str) -> str:
-        """Preprocess code to remove fig.show() calls."""
-        # Remove fig.show() calls
-        generated_code = re.sub(r"fig\.show\(\s*\)", "", generated_code)
-        generated_code = re.sub(r"fig\.show\(.*\)", "", generated_code)
-        return generated_code
-
     def execute_code(self, generated_code: str) -> Dict[str, Any]:
         """
         Execute the provided code and capture the fig object if created.
@@ -120,23 +133,20 @@ class PlotlyAgentExecutionEnvironment:
         self.output = None
         self.error = None
 
-        # Preprocess code to remove fig.show() calls
-        processed_code = self.preprocess_code(generated_code)
-
         # Capture stdout
         old_stdout = sys.stdout
         sys.stdout = mystdout = StringIO()
 
         try:
             # Execute the code
-            exec(processed_code, globals(), self.locals_dict)
+            exec(generated_code, globals(), self.locals_dict)
 
             # Check if a fig object was created
             if "fig" in self.locals_dict:
                 self.fig = self.locals_dict["fig"]
-                self.output = "Code executed successfully. Figure object was created."
+                self.output = "Code executed successfully. 'fig' object was created."
             else:
-                print(f"no fig object created: {processed_code}")
+                print(f"no fig object created: {generated_code}")
                 self.error = "Code executed without errors, but no 'fig' object was created. Make sure your code creates a variable named 'fig'."
 
         except Exception as e:
@@ -257,6 +267,12 @@ class PlotlyAgent:
         else:
             return "No figure has been created yet."
 
+    def view_generated_code(self, *args, **kwargs) -> str:
+        """
+        View the generated code.
+        """
+        return self.generated_code
+
     def _initialize_agent(self):
         """Initialize the LangChain agent with the necessary tools and prompt."""
         tools = [
@@ -266,11 +282,17 @@ class PlotlyAgent:
                 description="Execute the provided Plotly code and return the result",
                 args_schema=GeneratedCodeInput,
             ),
-            Tool.from_function(
+            StructuredTool.from_function(
                 func=self.does_fig_exist,
                 name="does_fig_exist",
-                description="Check if a figure exists and is available for display",
-                args_schema=None,
+                description="Check if a figure exists and is available for display. This tool takes no arguments.",
+                args_schema=DoesFigExistInput,
+            ),
+            StructuredTool.from_function(
+                func=self.view_generated_code,
+                name="view_generated_code",
+                description="View the generated code.",
+                args_schema=ViewGeneratedCodeInput,
             ),
         ]
 
