@@ -14,7 +14,7 @@ from plot_agent.models import (
     DoesFigExistInput,
     ViewGeneratedCodeInput,
 )
-from plot_agent.execution import PlotAgentExecutionEnvironment
+from plot_agent.execution_safer import PlotAgentExecutionEnvironment
 
 
 class PlotAgent:
