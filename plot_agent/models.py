@@ -1,3 +1,7 @@
+"""
+This module contains the models for the PlotAgent.
+"""
+
 from pydantic import BaseModel, Field
 
 

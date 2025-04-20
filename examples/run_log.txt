@@ -1,0 +1,52 @@
+2025-04-20 12:51:13,933 - 
+==================================================
+2025-04-20 12:51:13,933 - New run started at 2025-04-20 12:51:13
+2025-04-20 12:51:13,933 - ==================================================
+2025-04-20 12:51:13,933 - This script was run using 'make run-examples'
+2025-04-20 12:51:13,933 - To run locally, ensure you have the required dependencies installed
+2025-04-20 12:51:13,933 - and run: python scripts/run_examples.py
+2025-04-20 12:51:13,933 - ==================================================
+
+2025-04-20 12:51:13,934 - Running notebook: example_0.ipynb
+2025-04-20 12:51:13,937 - Running notebook: example_1.ipynb
+2025-04-20 12:51:13,938 - Running notebook: example_10.ipynb
+2025-04-20 12:51:42,415 - Successfully executed: example_10.ipynb
+2025-04-20 12:51:42,415 - Execution time (example_10.ipynb): 28.48 seconds
+2025-04-20 12:51:42,416 - Running notebook: example_2.ipynb
+2025-04-20 12:51:54,775 - Successfully executed: example_1.ipynb
+2025-04-20 12:51:54,776 - Execution time (example_1.ipynb): 40.84 seconds
+2025-04-20 12:51:54,777 - Running notebook: example_3.ipynb
+2025-04-20 12:52:20,857 - Successfully executed: example_0.ipynb
+2025-04-20 12:52:20,858 - Execution time (example_0.ipynb): 66.92 seconds
+2025-04-20 12:52:20,859 - Running notebook: example_4.ipynb
+2025-04-20 12:52:31,199 - Successfully executed: example_3.ipynb
+2025-04-20 12:52:31,223 - Execution time (example_3.ipynb): 36.42 seconds
+2025-04-20 12:52:31,236 - Running notebook: example_5.ipynb
+2025-04-20 12:52:31,912 - Successfully executed: example_2.ipynb
+2025-04-20 12:52:31,913 - Execution time (example_2.ipynb): 49.50 seconds
+2025-04-20 12:52:31,914 - Running notebook: example_6.ipynb
+2025-04-20 12:52:57,242 - Successfully executed: example_6.ipynb
+2025-04-20 12:52:57,242 - Execution time (example_6.ipynb): 25.33 seconds
+2025-04-20 12:52:57,243 - Running notebook: example_7.ipynb
+2025-04-20 12:53:01,409 - Successfully executed: example_5.ipynb
+2025-04-20 12:53:01,409 - Execution time (example_5.ipynb): 30.15 seconds
+2025-04-20 12:53:01,409 - Running notebook: example_8.ipynb
+2025-04-20 12:53:25,913 - Successfully executed: example_7.ipynb
+2025-04-20 12:53:25,925 - Execution time (example_7.ipynb): 28.67 seconds
+2025-04-20 12:53:25,956 - Running notebook: example_9.ipynb
+2025-04-20 12:53:28,687 - Successfully executed: example_4.ipynb
+2025-04-20 12:53:28,687 - Execution time (example_4.ipynb): 67.82 seconds
+2025-04-20 12:53:30,339 - Successfully executed: example_8.ipynb
+2025-04-20 12:53:30,339 - Execution time (example_8.ipynb): 28.93 seconds
+2025-04-20 12:53:53,802 - Successfully executed: example_9.ipynb
+2025-04-20 12:53:53,803 - Execution time (example_9.ipynb): 27.84 seconds
+2025-04-20 12:53:53,803 - 
+Execution Summary:
+2025-04-20 12:53:53,803 - Total notebooks executed: 11
+2025-04-20 12:53:53,804 - Total execution time: 430.90 seconds
+2025-04-20 12:53:53,804 - Average execution time: 39.17 seconds
+2025-04-20 12:53:53,804 - Fastest notebook: example_6.ipynb (25.33 seconds)
+2025-04-20 12:53:53,804 - Slowest notebook: example_4.ipynb (67.82 seconds)
+2025-04-20 12:53:53,804 - 
+==================================================
+

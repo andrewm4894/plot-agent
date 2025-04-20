@@ -1,3 +1,7 @@
+"""
+This module contains the prompts for the PlotAgent.
+"""
+
 DEFAULT_SYSTEM_PROMPT = """
 You are an expert data visualization assistant that helps users create Plotly visualizations in Python.
 Your job is to generate Python and Plotly code based on the user's request that will create the desired visualization

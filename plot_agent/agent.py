@@ -1,3 +1,7 @@
+"""
+This module contains the PlotAgent class, which is used to generate Plotly code based on a user's plot description.
+"""
+
 import pandas as pd
 from io import StringIO
 from typing import Optional
@@ -14,7 +18,7 @@ from plot_agent.models import (
     DoesFigExistInput,
     ViewGeneratedCodeInput,
 )
-from plot_agent.execution_safer import PlotAgentExecutionEnvironment
+from plot_agent.execution import PlotAgentExecutionEnvironment
 
 
 class PlotAgent:
@@ -123,7 +127,7 @@ class PlotAgent:
 
         # Check if the code executed successfully
         if code_execution_success:
-            return f"Code executed successfully! A figure object was created.\n{code_execution_output}"
+            return f"Success: {code_execution_output}"
         else:
             return f"Error: {code_execution_error}\n{code_execution_output}"
 
