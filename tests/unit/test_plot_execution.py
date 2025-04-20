@@ -53,8 +53,7 @@ def test_handle_syntax_error():
 fig = px.scatter(df, x='x', y='y'  # Missing closing parenthesis"""
 
     result = agent.execute_plotly_code(invalid_code)
-    assert "Error" in result
-    assert "SyntaxError" in result
+    assert "Error: Code rejected on safety grounds: '(' was never closed (<unknown>, line 2)" in result
     assert agent.execution_env.fig is None
 
 
