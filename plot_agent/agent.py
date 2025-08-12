@@ -4,12 +4,15 @@ This module contains the PlotAgent class, which is used to generate Plotly code 
 
 import pandas as pd
 from io import StringIO
+import os
+import re
+import logging
 from typing import Optional
+from dotenv import load_dotenv
 
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.tools import Tool, StructuredTool
-from langchain.agents import AgentExecutor, create_openai_tools_agent
+from langgraph.prebuilt import create_react_agent
 from langchain_openai import ChatOpenAI
 
 from plot_agent.prompt import DEFAULT_SYSTEM_PROMPT
@@ -28,12 +31,16 @@ class PlotAgent:
 
     def __init__(
         self,
-        model="gpt-4o-mini",
+        model: str = "gpt-4o-mini",
         system_prompt: Optional[str] = None,
         verbose: bool = True,
         max_iterations: int = 10,
         early_stopping_method: str = "force",
         handle_parsing_errors: bool = True,
+        llm_temperature: float = 0.0,
+        llm_timeout: int = 60,
+        llm_max_retries: int = 1,
+        debug: bool = False,
     ):
         """
         Initialize the PlotAgent.
@@ -46,13 +53,43 @@ class PlotAgent:
             early_stopping_method (str): Method to use for early stopping.
             handle_parsing_errors (bool): Whether to handle parsing errors gracefully.
         """
-        self.llm = ChatOpenAI(model=model)
+        # Load .env if present, then require a valid API key
+        load_dotenv()
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            raise RuntimeError(
+                "OPENAI_API_KEY is not set. Provide it via environment or a .env file."
+            )
+        self.debug = debug or os.getenv("PLOT_AGENT_DEBUG") == "1"
+
+        # Configure logger
+        self._logger = logging.getLogger("plot_agent")
+        if self.debug:
+            self._logger.setLevel(logging.DEBUG)
+            if not self._logger.handlers:
+                handler = logging.StreamHandler()
+                handler.setFormatter(
+                    logging.Formatter(
+                        "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+                        datefmt="%H:%M:%S",
+                    )
+                )
+                self._logger.addHandler(handler)
+
+        self.llm = ChatOpenAI(
+            model=model,
+            temperature=llm_temperature,
+            timeout=llm_timeout,
+            max_retries=llm_max_retries,
+        )
         self.df = None
         self.df_info = None
         self.df_head = None
         self.sql_query = None
         self.execution_env = None
         self.chat_history = []
+        # Internal graph-native message history, including tool messages
+        self._graph_messages = []
         self.agent_executor = None
         self.generated_code = None
         self.system_prompt = system_prompt or DEFAULT_SYSTEM_PROMPT
@@ -98,6 +135,10 @@ class PlotAgent:
 
         # Initialize the agent with tools
         self._initialize_agent()
+        # Reset graph messages for a fresh session with this dataframe
+        self._graph_messages = []
+        if self.debug:
+            self._logger.debug("set_df() initialized execution environment and graph")
 
     def execute_plotly_code(self, generated_code: str) -> str:
         """
@@ -154,10 +195,10 @@ class PlotAgent:
         """
         View the generated code.
         """
-        return self.generated_code
+        return self.generated_code or ""
 
     def _initialize_agent(self):
-        """Initialize the LangChain agent with the necessary tools and prompt."""
+        """Initialize a LangGraph ReAct agent with tools and keep API compatibility."""
 
         # Initialize the tools
         tools = [
@@ -191,36 +232,31 @@ class PlotAgent:
             ),
         ]
 
-        # Create system prompt with dataframe information
+        # Prepare system prompt with dataframe information
         sql_context = ""
         if self.sql_query:
-            sql_context = f"In case it is useful to help with the data understanding, the df was generated using the following SQL query:\n```sql\n{self.sql_query}\n```"
+            sql_context = (
+                "In case it is useful to help with the data understanding, the df was generated using the following SQL query:\n"
+                f"```sql\n{self.sql_query}\n```"
+            )
 
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                (
-                    "system",
-                    self.system_prompt.format(
-                        df_info=self.df_info,
-                        df_head=self.df_head,
-                        sql_context=sql_context,
-                    ),
-                ),
-                MessagesPlaceholder(variable_name="chat_history"),
-                ("human", "{input}"),
-                MessagesPlaceholder(variable_name="agent_scratchpad"),
-            ]
+        # Store formatted system instructions for the graph state modifier
+        self._system_message_content = self.system_prompt.format(
+            df_info=self.df_info,
+            df_head=self.df_head,
+            sql_context=sql_context,
         )
 
-        agent = create_openai_tools_agent(self.llm, tools, prompt)
-        self.agent_executor = AgentExecutor(
-            agent=agent,
-            tools=tools,
-            verbose=self.verbose,
-            max_iterations=self.max_iterations,
-            early_stopping_method=self.early_stopping_method,
-            handle_parsing_errors=self.handle_parsing_errors,
+        # Create a ReAct agent graph with the provided tools and system prompt
+        self._graph = create_react_agent(
+            self.llm,
+            tools,
+            prompt=self._system_message_content,
+            debug=self.debug,
         )
+
+        # Backwards-compatibility: expose under the old attribute name
+        self.agent_executor = self._graph
 
     def process_message(self, user_message: str) -> str:
         """Process a user message and return the agent's response."""
@@ -229,33 +265,135 @@ class PlotAgent:
         if not self.agent_executor:
             return "Please set a dataframe first using set_df() method."
 
-        # Add user message to chat history
+        # Add user message to outward-facing chat history
         self.chat_history.append(HumanMessage(content=user_message))
 
         # Reset generated_code
         self.generated_code = None
 
-        # Get response from agent
-        response = self.agent_executor.invoke(
-            {"input": user_message, "chat_history": self.chat_history}
+        # Short-circuit empty inputs to avoid graph recursion
+        if user_message.strip() == "":
+            ai_content = (
+                "Please provide a non-empty plotting request (e.g., 'scatter x vs y')."
+            )
+            self.chat_history.append(AIMessage(content=ai_content))
+            if self.debug:
+                self._logger.debug("empty message received; returning guidance without invoking graph")
+            return ai_content
+
+        # Short-circuit messages that are primarily raw code blocks without a visualization request
+        if "```" in user_message and not re.search(
+            r"\b(plot|chart|graph|visuali(s|z)e|figure|subplot|heatmap|bar|line|scatter)\b",
+            user_message,
+            flags=re.IGNORECASE,
+        ):
+            ai_content = (
+                "I see a code snippet. Please describe the visualization you want (e.g., 'line chart of y over x')."
+            )
+            self.chat_history.append(AIMessage(content=ai_content))
+            if self.debug:
+                self._logger.debug("code-only message received; returning guidance without invoking graph")
+            return ai_content
+
+        # Build graph messages (includes tool call/observation history)
+        graph_messages = [*self._graph_messages, HumanMessage(content=user_message)]
+        if self.debug:
+            self._logger.debug(f"process_message() user: {user_message}")
+            self._logger.debug(f"graph message count before invoke: {len(graph_messages)}")
+        # Invoke the LangGraph agent
+        result = self.agent_executor.invoke(
+            {"messages": graph_messages},
+            config={"recursion_limit": self.max_iterations},
         )
 
-        # Add agent response to chat history
-        self.chat_history.append(AIMessage(content=response["output"]))
+        # Extract the latest AI message from the returned messages
+        ai_messages = [m for m in result.get("messages", []) if isinstance(m, AIMessage)]
+        ai_content = ai_messages[-1].content if ai_messages else ""
 
-        # If the agent didn't execute the code, but did generate code, execute it directly
-        if self.execution_env.fig is None and self.generated_code is not None:
-            self.execution_env.execute_code(self.generated_code)
+        # Persist full graph messages for future context
+        self._graph_messages = result.get("messages", [])
+        if self.debug:
+            self._logger.debug(f"graph message count after invoke: {len(self._graph_messages)}")
 
-        # If we can extract code from the response when no code was executed, try that too
-        if self.execution_env.fig is None and "```python" in response["output"]:
-            code_blocks = response["output"].split("```python")
-            if len(code_blocks) > 1:
-                generated_code = code_blocks[1].split("```")[0].strip()
-                self.execution_env.execute_code(generated_code)
+        # Add agent response to outward-facing chat history
+        self.chat_history.append(AIMessage(content=ai_content))
 
-        # Return the agent's response
-        return response["output"]
+        # If the agent didn't execute the code via tool, but we have prior generated_code, execute it
+        if self.execution_env and self.execution_env.fig is None and self.generated_code is not None:
+            if self.debug:
+                self._logger.debug("executing stored generated_code because no fig exists yet")
+            exec_result = self.execution_env.execute_code(self.generated_code)
+            if self.debug:
+                self._logger.debug(f"execution result success={exec_result.get('success')} error={exec_result.get('error')!r}")
+
+        # If the assistant returned code in the message, execute it to update the figure
+        code_executed = False
+        if self.execution_env and isinstance(ai_content, str):
+            extracted_code = None
+            if "```python" in ai_content:
+                parts = ai_content.split("```python", 1)
+                extracted_code = parts[1].split("```", 1)[0].strip() if len(parts) > 1 else None
+            elif "```" in ai_content:
+                # Fallback: extract first generic fenced code block
+                parts = ai_content.split("```", 1)
+                if len(parts) > 1:
+                    extracted_code = parts[1].split("```", 1)[0].strip()
+            if extracted_code:
+                if (self.generated_code or "").strip() != extracted_code:
+                    self.generated_code = extracted_code
+                    if self.debug:
+                        self._logger.debug("executing code extracted from AI message")
+                    exec_result = self.execution_env.execute_code(extracted_code)
+                    if self.debug:
+                        self._logger.debug(f"execution result success={exec_result.get('success')} error={exec_result.get('error')!r}")
+                    code_executed = True
+
+        # If still no figure and no code was executed, run one guided retry to force tool usage
+        if self.execution_env and self.execution_env.fig is None and not code_executed:
+            if self.debug:
+                self._logger.debug("guided retry: prompting model to use execute_plotly_code tool")
+            guided_messages = [
+                *self._graph_messages,
+                HumanMessage(
+                    content=(
+                        "Please use the execute_plotly_code(generated_code) tool with the FULL code to "
+                        "create a variable named 'fig', then call does_fig_exist(). Return the final "
+                        "code in a fenced ```python block."
+                    )
+                ),
+            ]
+            retry_result = self.agent_executor.invoke(
+                {"messages": guided_messages},
+                config={"recursion_limit": max(3, self.max_iterations // 2)},
+            )
+            self._graph_messages = retry_result.get("messages", [])
+            retry_ai_messages = [
+                m for m in self._graph_messages if isinstance(m, AIMessage)
+            ]
+            retry_content = retry_ai_messages[-1].content if retry_ai_messages else ""
+            if isinstance(retry_content, str):
+                if "```python" in retry_content:
+                    parts = retry_content.split("```python", 1)
+                    retry_code = (
+                        parts[1].split("```", 1)[0].strip() if len(parts) > 1 else None
+                    )
+                elif "```" in retry_content:
+                    parts = retry_content.split("```", 1)
+                    retry_code = (
+                        parts[1].split("```", 1)[0].strip() if len(parts) > 1 else None
+                    )
+                else:
+                    retry_code = None
+                if retry_code:
+                    if (self.generated_code or "").strip() != retry_code:
+                        self.generated_code = retry_code
+                        if self.debug:
+                            self._logger.debug("executing code extracted from guided retry response")
+                        exec_result = self.execution_env.execute_code(retry_code)
+                        if self.debug:
+                            self._logger.debug(f"execution result success={exec_result.get('success')} error={exec_result.get('error')!r}")
+
+        return ai_content if isinstance(ai_content, str) else str(ai_content)
 
     def get_figure(self):
         """Return the current figure if one exists."""
