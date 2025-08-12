@@ -11,6 +11,7 @@ Security features:
 import ast
 import builtins
 import signal
+import threading
 import traceback
 from io import StringIO
 import contextlib
@@ -183,9 +184,16 @@ class PlotAgentExecutionEnvironment:
                 "success": False,
             }
 
-        # Set a timeout
-        signal.signal(signal.SIGALRM, _timeout_handler)
-        signal.alarm(self.TIMEOUT_SECONDS)
+        # Set a timeout only if running on the main thread; signals are not supported in worker threads
+        timeout_set = False
+        try:
+            if threading.current_thread() is threading.main_thread():
+                signal.signal(signal.SIGALRM, _timeout_handler)
+                signal.alarm(self.TIMEOUT_SECONDS)
+                timeout_set = True
+        except Exception:
+            # If setting the signal handler fails (e.g., not in main thread), proceed without timeout
+            timeout_set = False
 
         # Execute the code
         out_buf, err_buf = StringIO(), StringIO()
@@ -215,8 +223,12 @@ class PlotAgentExecutionEnvironment:
                 "success": False,
             }
         finally:
-            # Reset the timeout
-            signal.alarm(0)
+            # Reset the timeout if it was set
+            if timeout_set:
+                try:
+                    signal.alarm(0)
+                except Exception:
+                    pass
 
         # Get the `fig`
         fig = ns.get("fig")
