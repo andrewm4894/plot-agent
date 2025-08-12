@@ -5,6 +5,8 @@
 
 An AI-powered data visualization assistant that helps users create Plotly visualizations in Python.
 
+Built on LangGraph with tool-calling to reliably execute generated Plotly code in a sandbox and keep the current `fig` in sync.
+
 ## Installation
 
 You can install the package using pip:
@@ -23,7 +25,7 @@ Here's a simple minimal example of how to use Plot Agent:
 import pandas as pd
 from plot_agent.agent import PlotAgent
 
-# ensure OPENAI_API_KEY is set and available for langchain
+# ensure OPENAI_API_KEY is set (env or .env); optional debug via PLOT_AGENT_DEBUG=1
 
 # Create a sample dataframe
 df = pd.DataFrame({
@@ -78,18 +80,71 @@ fig.update_layout(
 )
 ```
 
+## How it works
+
+```mermaid
+flowchart TD
+    A[User message] --> B{LangGraph ReAct Agent}
+    subgraph Tools
+      T1[execute_plotly_code<br/>- runs code in sandbox<br/>- returns success/fig/error]
+      T2[does_fig_exist]
+      T3[view_generated_code]
+    end
+    B -- tool call --> T1
+    T1 -- result --> B
+    B -- optional --> T2
+    B -- optional --> T3
+    B --> C[AI response]
+    C --> D{Agent wrapper}
+    D -- persist messages --> B
+    D -- extract code blocks --> E[Sandbox execution]
+    E --> F[fig]
+    F --> G[get_figure]
+```
+
+- The LangGraph agent plans and decides when to call tools.
+- The wrapper persists full graph messages between turns and executes any returned code blocks to keep `fig` updated.
+- A safe execution environment runs code with an allowlist and a main-thread-only timeout.
+
 ## Features
 
 - AI-powered visualization generation
 - Support for various Plotly chart types
 - Automatic data preprocessing
 - Interactive visualization capabilities
-- Integration with LangChain for advanced AI capabilities
+- LangGraph-based tool calling and control flow
+- Debug logging via `PlotAgent(debug=True)` or `PLOT_AGENT_DEBUG=1`
 
 ## Requirements
 
 - Python 3.8 or higher
 - Dependencies are automatically installed with the package
+
+## Development
+
+- Run unit tests:
+
+```bash
+make test
+```
+
+- Execute all example notebooks:
+
+```bash
+make run-examples
+```
+
+- Execute with debug logs enabled:
+
+```bash
+make run-examples-debug
+```
+
+- Quick CLI repro that prints evolving code each step:
+
+```bash
+make run-example-script
+```
 
 ## License
 
