@@ -112,9 +112,12 @@ class PlotAgentExecutionEnvironment:
     }
 
     def __init__(self, df: pd.DataFrame):
+        """Initialize the execution environment with a dataframe.
+
+        Requires a non-empty pandas DataFrame.
         """
-        Initialize the execution environment with a dataframe.
-        """
+        assert isinstance(df, pd.DataFrame), "df must be a pandas DataFrame"
+        assert not df.empty, "df must not be empty"
         self.df = df
         # Base namespace for both globals & locals
         self._base_ns = {

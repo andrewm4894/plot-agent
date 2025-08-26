@@ -2,9 +2,11 @@ pandas
 numpy
 matplotlib
 plotly
-langchain-core
-langchain
+langchain-core>=0.3
 langchain-openai
-langgraph
-pydantic
+langgraph>=0.6.0
+pydantic>=2.7
 python-dotenv
+# Optional checkpointing
+sqlalchemy
+aiosqlite

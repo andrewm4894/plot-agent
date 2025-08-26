@@ -1,97 +1,62 @@
 import pytest
 import pandas as pd
-from plot_agent.agent import PlotAgent
+from plot_agent.execution import PlotAgentExecutionEnvironment
+from plot_agent.tools import does_fig_exist, view_generated_code
 
 
 def test_does_fig_exist():
-    """Test that does_fig_exist correctly reports figure existence."""
-    df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
+    """Check figure existence using the tool and a fake Context."""
+    class _Ctx:
+        def __init__(self, df):
+            self.state = {"fig": {"fig_json": None}}
+            self.store = {"df": df}
+            self.logger = None
 
-    agent = PlotAgent()
-    agent.set_df(df)
-
-    # Initially no figure should exist
-    assert "No figure has been created yet" in agent.does_fig_exist()
-
-    # Create a figure
-    valid_code = """import plotly.express as px
-fig = px.scatter(df, x='x', y='y')"""
-    agent.execute_plotly_code(valid_code)
-
-    # Now a figure should exist
-    assert "A figure is available for display" in agent.does_fig_exist()
+    df = pd.DataFrame({"x": [1, 2, 3], "y": [1, 4, 9]})
+    ctx = _Ctx(df)
+    assert does_fig_exist(None, ctx) is False
+    env = PlotAgentExecutionEnvironment(df)
+    env.execute_code("""import plotly.express as px
+fig = px.scatter(df, x='x', y='y')""")
+    ctx.state["fig"]["fig_json"] = env.fig.to_json()
+    assert does_fig_exist(None, ctx) is True
 
 
-def test_get_figure():
-    """Test that get_figure returns the current figure if it exists."""
-    df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
-
-    agent = PlotAgent()
-    agent.set_df(df)
-
-    # Initially no figure should exist
-    assert agent.get_figure() is None
-
-    # Create a figure
-    valid_code = """import plotly.express as px
-fig = px.scatter(df, x='x', y='y')"""
-    agent.execute_plotly_code(valid_code)
-
-    # Now a figure should exist
-    assert agent.get_figure() is not None
+def test_get_figure_with_env():
+    df = pd.DataFrame({"x": [1, 2, 3], "y": [1, 4, 9]})
+    env = PlotAgentExecutionEnvironment(df)
+    assert env.fig is None
+    env.execute_code("""import plotly.express as px
+fig = px.scatter(df, x='x', y='y')""")
+    assert env.fig is not None
 
 
 def test_view_generated_code():
-    """Test that view_generated_code returns the last generated code."""
-    agent = PlotAgent()
-    test_code = "test code"
-    agent.generated_code = test_code
-    assert agent.view_generated_code() == test_code
+    class _Ctx:
+        def __init__(self):
+            self.state = {}
+            self.store = {}
+            self.logger = None
+    ctx = _Ctx()
+    ctx.store["last_code"] = "abc"
+    assert view_generated_code(None, ctx) == "abc"
 
 
-def test_tool_interaction():
-    """Test interaction between different tools."""
-    df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
-
-    agent = PlotAgent()
-    agent.set_df(df)
-
-    # First check if figure exists (should not)
-    assert "No figure has been created yet" in agent.does_fig_exist()
-
-    # Generate and execute code
-    code = """import plotly.express as px
-fig = px.scatter(df, x='x', y='y')"""
-    result = agent.execute_plotly_code(code)
-    assert "Code executed successfully" in result
-
-    # Check if figure exists (should now exist)
-    assert "A figure is available for display" in agent.does_fig_exist()
-
-    # View the generated code
-    assert code in agent.view_generated_code()
+def test_tool_interaction_minimal():
+    class _Ctx:
+        def __init__(self, df):
+            self.state = {"fig": {"fig_json": None}}
+            self.store = {"df": df, "last_code": "print('hi')"}
+            self.logger = None
+    df = pd.DataFrame({"x": [1, 2, 3], "y": [1, 2, 3]})
+    ctx = _Ctx(df)
+    assert does_fig_exist(None, ctx) is False
+    assert view_generated_code(None, ctx) == "print('hi')"
 
 
-def test_tool_response_formatting():
-    """Test formatting of tool responses."""
-    df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
-
-    agent = PlotAgent()
-    agent.set_df(df)
-
-    # Test execute_plotly_code response format
-    code = """import plotly.express as px
-fig = px.scatter(df, x='x', y='y')"""
-    result = agent.execute_plotly_code(code)
-    assert isinstance(result, str)
-    assert "Code executed successfully" in result
-
-    # Test does_fig_exist response format
-    result = agent.does_fig_exist()
-    assert isinstance(result, str)
-    assert "figure" in result.lower()
-
-    # Test view_generated_code response format
-    result = agent.view_generated_code()
-    assert isinstance(result, str)
-    assert code in result 
+def test_tool_response_formatting_replacement():
+    df = pd.DataFrame({"x": [1, 2, 3], "y": [3, 2, 1]})
+    env = PlotAgentExecutionEnvironment(df)
+    result = env.execute_code("""import plotly.express as px
+fig = px.scatter(df, x='x', y='y')""")
+    assert result["success"] is True
