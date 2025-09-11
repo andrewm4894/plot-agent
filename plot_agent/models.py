@@ -31,3 +31,9 @@ class ViewGeneratedCodeInput(BaseModel):
     """Model indicating that the view_generated_code function takes no arguments."""
 
     pass
+
+
+class CheckPlotOutputsInput(BaseModel):
+    """Model indicating that the check_plot_outputs function takes no arguments."""
+
+    pass

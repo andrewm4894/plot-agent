@@ -39,7 +39,9 @@ def test_large_dataframe_handling():
 
     # Test plot generation with large dataframe
     code = """import plotly.express as px
-fig = px.scatter(df, x='x', y='y')"""
+fig = px.scatter(df, x='x', y='y')
+plot_title = "Large Dataset Scatter Plot"
+plot_summary = "Scatter plot of 10,000 data points showing X vs Y relationship." """
     result = agent.execute_plotly_code(code)
     assert "Code executed successfully" in result
     assert agent.execution_env.fig is not None

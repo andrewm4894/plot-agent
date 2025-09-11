@@ -20,6 +20,7 @@ from plot_agent.models import (
     GeneratedCodeInput,
     DoesFigExistInput,
     ViewGeneratedCodeInput,
+    CheckPlotOutputsInput,
 )
 from plot_agent.execution import PlotAgentExecutionEnvironment
 
@@ -191,6 +192,44 @@ class PlotAgent:
         else:
             return "No figure has been created yet."
 
+    def check_plot_outputs(self, *args, **kwargs) -> str:
+        """
+        Check if all required plot outputs (fig, plot_title, plot_summary) are available.
+
+        Args:
+            *args: Any positional arguments (ignored)
+            **kwargs: Any keyword arguments (ignored)
+
+        Returns:
+            str: A message indicating which plot outputs are available.
+        """
+        if not self.execution_env:
+            return "No execution environment has been initialized. Please set a dataframe first."
+
+        available = []
+        missing = []
+        
+        if self.execution_env.fig is not None:
+            available.append("fig")
+        else:
+            missing.append("fig")
+            
+        if self.execution_env.plot_title is not None:
+            available.append("plot_title")
+        else:
+            missing.append("plot_title")
+            
+        if self.execution_env.plot_summary is not None:
+            available.append("plot_summary")
+        else:
+            missing.append("plot_summary")
+        
+        if not missing:
+            return "All required plot outputs are available: fig, plot_title, and plot_summary."
+        else:
+            status = f"Available: {', '.join(available) if available else 'none'}. Missing: {', '.join(missing)}."
+            return status
+
     def view_generated_code(self, *args, **kwargs) -> str:
         """
         View the generated code.
@@ -229,6 +268,15 @@ class PlotAgent:
                     "This tool takes no arguments and returns the generated code as a string."
                 ),
                 args_schema=ViewGeneratedCodeInput,
+            ),
+            StructuredTool.from_function(
+                func=self.check_plot_outputs,
+                name="check_plot_outputs",
+                description=(
+                    "Check if all required plot outputs (fig, plot_title, plot_summary) are available. "
+                    "This tool takes no arguments and returns the status of all plot outputs."
+                ),
+                args_schema=CheckPlotOutputsInput,
             ),
         ]
 
@@ -401,7 +449,23 @@ class PlotAgent:
             return self.execution_env.fig
         return None
 
+    def get_plot_title(self):
+        """Return the current plot title if one exists."""
+        if self.execution_env and self.execution_env.plot_title:
+            return self.execution_env.plot_title
+        return None
+
+    def get_plot_summary(self):
+        """Return the current plot summary if one exists."""
+        if self.execution_env and self.execution_env.plot_summary:
+            return self.execution_env.plot_summary
+        return None
+
     def reset_conversation(self):
         """Reset the conversation history."""
         self.chat_history = []
         self.generated_code = None
+        if self.execution_env:
+            self.execution_env.fig = None
+            self.execution_env.plot_title = None
+            self.execution_env.plot_summary = None
