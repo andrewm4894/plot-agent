@@ -15,7 +15,10 @@ def test_does_fig_exist():
 
     # Create a figure
     valid_code = """import plotly.express as px
-fig = px.scatter(df, x='x', y='y')"""
+fig = px.scatter(df, x='x', y='y')
+plot_title = "Test Scatter Plot"
+plot_summary = "A scatter plot showing X vs Y relationship."
+"""
     agent.execute_plotly_code(valid_code)
 
     # Now a figure should exist
@@ -34,7 +37,10 @@ def test_get_figure():
 
     # Create a figure
     valid_code = """import plotly.express as px
-fig = px.scatter(df, x='x', y='y')"""
+fig = px.scatter(df, x='x', y='y')
+plot_title = "Test Scatter Plot"
+plot_summary = "A scatter plot showing X vs Y relationship."
+"""
     agent.execute_plotly_code(valid_code)
 
     # Now a figure should exist
@@ -61,7 +67,10 @@ def test_tool_interaction():
 
     # Generate and execute code
     code = """import plotly.express as px
-fig = px.scatter(df, x='x', y='y')"""
+fig = px.scatter(df, x='x', y='y')
+plot_title = "Test Scatter Plot"
+plot_summary = "A scatter plot showing X vs Y relationship."
+"""
     result = agent.execute_plotly_code(code)
     assert "Code executed successfully" in result
 
@@ -81,7 +90,10 @@ def test_tool_response_formatting():
 
     # Test execute_plotly_code response format
     code = """import plotly.express as px
-fig = px.scatter(df, x='x', y='y')"""
+fig = px.scatter(df, x='x', y='y')
+plot_title = "Test Scatter Plot"
+plot_summary = "A scatter plot showing X vs Y relationship."
+"""
     result = agent.execute_plotly_code(code)
     assert isinstance(result, str)
     assert "Code executed successfully" in result
@@ -95,3 +107,89 @@ fig = px.scatter(df, x='x', y='y')"""
     result = agent.view_generated_code()
     assert isinstance(result, str)
     assert code in result 
+
+
+def test_get_plot_title_and_summary():
+    """Test that get_plot_title and get_plot_summary return the current values."""
+    df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
+
+    agent = PlotAgent()
+    agent.set_df(df)
+
+    # Initially no plot_title or plot_summary should exist
+    assert agent.get_plot_title() is None
+    assert agent.get_plot_summary() is None
+
+    # Create a figure with title and summary
+    valid_code = """import plotly.express as px
+fig = px.scatter(df, x='x', y='y')
+plot_title = "Test Scatter Plot"
+plot_summary = "A scatter plot showing X vs Y relationship."
+"""
+    agent.execute_plotly_code(valid_code)
+
+    # Now plot_title and plot_summary should exist
+    assert agent.get_plot_title() == "Test Scatter Plot"
+    assert agent.get_plot_summary() == "A scatter plot showing X vs Y relationship."
+
+
+def test_check_plot_outputs():
+    """Test the check_plot_outputs tool functionality."""
+    df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
+
+    agent = PlotAgent()
+    agent.set_df(df)
+
+    # Initially no outputs should exist
+    result = agent.check_plot_outputs()
+    assert "Available: none" in result
+    assert "Missing: fig, plot_title, plot_summary" in result
+
+    # Create only figure
+    incomplete_code = """import plotly.express as px
+fig = px.scatter(df, x='x', y='y')"""
+    agent.execute_plotly_code(incomplete_code)
+
+    result = agent.check_plot_outputs()
+    assert "Available: fig" in result
+    assert "Missing: plot_title, plot_summary" in result
+
+    # Create all outputs
+    complete_code = """import plotly.express as px
+fig = px.scatter(df, x='x', y='y')
+plot_title = "Complete Plot"
+plot_summary = "This plot has all required outputs."
+"""
+    agent.execute_plotly_code(complete_code)
+
+    result = agent.check_plot_outputs()
+    assert "All required plot outputs are available" in result
+
+
+def test_reset_conversation_clears_all_outputs():
+    """Test that reset_conversation clears all plot outputs."""
+    df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
+
+    agent = PlotAgent()
+    agent.set_df(df)
+
+    # Create all outputs
+    complete_code = """import plotly.express as px
+fig = px.scatter(df, x='x', y='y')
+plot_title = "Test Plot"
+plot_summary = "Test summary."
+"""
+    agent.execute_plotly_code(complete_code)
+
+    # Verify outputs exist
+    assert agent.get_figure() is not None
+    assert agent.get_plot_title() is not None
+    assert agent.get_plot_summary() is not None
+
+    # Reset conversation
+    agent.reset_conversation()
+
+    # Verify outputs are cleared
+    assert agent.get_figure() is None
+    assert agent.get_plot_title() is None
+    assert agent.get_plot_summary() is None

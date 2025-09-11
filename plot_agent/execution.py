@@ -128,6 +128,8 @@ class PlotAgentExecutionEnvironment:
             "make_subplots": make_subplots,
         }
         self.fig = None
+        self.plot_title = None
+        self.plot_summary = None
 
     def _validate_ast(self, node: ast.AST):
         """
@@ -167,8 +169,10 @@ class PlotAgentExecutionEnvironment:
 
         # Copy the base namespace
         ns = self._base_ns.copy()
-        # Purge any old `fig`
+        # Purge any old variables
         ns.pop("fig", None)
+        ns.pop("plot_title", None)
+        ns.pop("plot_summary", None)
 
         try:
             # Parse the generated code
@@ -179,6 +183,8 @@ class PlotAgentExecutionEnvironment:
             # If the code is rejected on safety grounds, return an error
             return {
                 "fig": None,
+                "plot_title": None,
+                "plot_summary": None,
                 "output": "",
                 "error": f"Code rejected on safety grounds: {e}",
                 "success": False,
@@ -209,6 +215,8 @@ class PlotAgentExecutionEnvironment:
             tb = traceback.format_exc()
             return {
                 "fig": None,
+                "plot_title": None,
+                "plot_summary": None,
                 "output": out_buf.getvalue(),
                 "error": f"Code execution timed out: {te}\n{tb}",
                 "success": False,
@@ -218,6 +226,8 @@ class PlotAgentExecutionEnvironment:
             tb = traceback.format_exc()
             return {
                 "fig": None,
+                "plot_title": None,
+                "plot_summary": None,
                 "output": out_buf.getvalue(),
                 "error": f"Error executing code: {e}\n{tb}",
                 "success": False,
@@ -230,21 +240,58 @@ class PlotAgentExecutionEnvironment:
                 except Exception:
                     pass
 
-        # Get the `fig`
+        # Get the variables
         fig = ns.get("fig")
+        plot_title = ns.get("plot_title")
+        plot_summary = ns.get("plot_summary")
+        
+        # Store the variables
         self.fig = fig
+        self.plot_title = plot_title
+        self.plot_summary = plot_summary
+        
+        # Validate required variables
+        missing_vars = []
         if fig is None:
+            missing_vars.append("fig")
+        if plot_title is None:
+            missing_vars.append("plot_title")
+        if plot_summary is None:
+            missing_vars.append("plot_summary")
+        
+        if missing_vars:
             return {
-                "fig": None,
+                "fig": fig,
+                "plot_title": plot_title,
+                "plot_summary": plot_summary,
                 "output": out_buf.getvalue(),
-                "error": "No `fig` created. Assign your figure to a variable named `fig`.",
+                "error": f"Missing required variables: {', '.join(missing_vars)}. Please create variables named: {', '.join(missing_vars)}.",
+                "success": False,
+            }
+        
+        # Validate that plot_title and plot_summary are strings
+        validation_errors = []
+        if not isinstance(plot_title, str):
+            validation_errors.append("plot_title must be a string")
+        if not isinstance(plot_summary, str):
+            validation_errors.append("plot_summary must be a string")
+        
+        if validation_errors:
+            return {
+                "fig": fig,
+                "plot_title": plot_title,
+                "plot_summary": plot_summary,
+                "output": out_buf.getvalue(),
+                "error": f"Validation errors: {'; '.join(validation_errors)}.",
                 "success": False,
             }
 
         # Return the result
         return {
             "fig": fig,
-            "output": "Code executed successfully. 'fig' object was created.",
+            "plot_title": plot_title,
+            "plot_summary": plot_summary,
+            "output": "Code executed successfully. 'fig', 'plot_title', and 'plot_summary' objects were created.",
             "error": "",
             "success": True,
         }
