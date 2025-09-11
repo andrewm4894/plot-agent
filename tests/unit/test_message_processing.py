@@ -1,9 +1,14 @@
 import pytest
 import pandas as pd
+import os
 from plot_agent.agent import PlotAgent
 from langchain_core.messages import HumanMessage, AIMessage
 
 
+@pytest.mark.skipif(
+    os.getenv("OPENAI_API_KEY", "").startswith("dummy_key"),
+    reason="Skipping API-dependent test with dummy key"
+)
 def test_process_message():
     """Test that process_message updates chat history and handles responses."""
     df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
@@ -65,7 +70,9 @@ def test_memory_cleanup():
     # Generate multiple plots
     for i in range(5):
         code = f"""import plotly.express as px
-fig = px.scatter(df, x='x', y='y', title='Plot {i}')"""
+fig = px.scatter(df, x='x', y='y', title='Plot {i}')
+plot_title = "Plot {i}"
+plot_summary = "Scatter plot number {i} showing X vs Y relationship." """
         result = agent.execute_plotly_code(code)
         assert "Code executed successfully" in result
         assert agent.execution_env.fig is not None
