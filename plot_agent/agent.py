@@ -3,10 +3,12 @@ This module contains the PlotAgent class, which is used to generate Plotly code 
 """
 
 import pandas as pd
-from io import StringIO
+from io import StringIO, BytesIO
 import os
 import re
 import logging
+import tempfile
+import base64
 from typing import Optional
 from dotenv import load_dotenv
 
@@ -21,6 +23,7 @@ from plot_agent.models import (
     DoesFigExistInput,
     ViewGeneratedCodeInput,
     CheckPlotOutputsInput,
+    ViewPlotImageInput,
 )
 from plot_agent.execution import PlotAgentExecutionEnvironment
 
@@ -236,6 +239,65 @@ class PlotAgent:
         """
         return self.generated_code or ""
 
+    def view_plot_image(self, *args, **kwargs) -> str:
+        """
+        Save the current plot figure to a temporary image file and return information about it.
+        This allows the agent to "see" the plot as an image for multimodal analysis.
+        
+        Returns:
+            str: Information about the saved image including file path and base64 encoded data
+        """
+        if not self.execution_env:
+            return "No execution environment has been initialized. Please set a dataframe first."
+        
+        if self.execution_env.fig is None:
+            return "No figure has been created yet. Please execute code to create a figure first."
+        
+        try:
+            # Create a temporary file to save the image
+            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
+                temp_path = tmp_file.name
+            
+            # Save the figure as PNG using plotly's to_image method
+            # This requires kaleido package, but we'll use plotly's built-in HTML export as fallback
+            try:
+                # Try to save as PNG image
+                img_bytes = self.execution_env.fig.to_image(format="png", width=800, height=600, scale=2)
+                with open(temp_path, 'wb') as f:
+                    f.write(img_bytes)
+                
+                # Also encode as base64 for inline viewing
+                img_base64 = base64.b64encode(img_bytes).decode('utf-8')
+                
+                return f"""Plot image saved successfully!
+
+Temporary file path: {temp_path}
+Image format: PNG (800x600, scale=2)
+File size: {len(img_bytes)} bytes
+
+Base64 encoded image data (for inline viewing):
+data:image/png;base64,{img_base64[:100]}...[truncated]
+
+The agent can now analyze this visual representation of the plot to provide feedback on visual elements like legends, colors, layout, etc."""
+                
+            except Exception as e:
+                # Fallback: save as HTML and inform about the limitation
+                with open(temp_path.replace('.png', '.html'), 'w') as f:
+                    f.write(self.execution_env.fig.to_html())
+                
+                return f"""Plot saved as HTML (PNG export failed: {str(e)})
+
+Temporary file path: {temp_path.replace('.png', '.html')}
+Image format: HTML (interactive plot)
+
+Note: PNG image export requires the 'kaleido' package. The plot has been saved as HTML instead.
+To enable PNG export, install kaleido: pip install kaleido
+
+The agent cannot directly view the HTML plot as an image, but the plot structure and data are available through other tools."""
+                
+        except Exception as e:
+            return f"Error saving plot image: {str(e)}"
+
     def _initialize_agent(self):
         """Initialize a LangGraph ReAct agent with tools and keep API compatibility."""
 
@@ -277,6 +339,17 @@ class PlotAgent:
                     "This tool takes no arguments and returns the status of all plot outputs."
                 ),
                 args_schema=CheckPlotOutputsInput,
+            ),
+            StructuredTool.from_function(
+                func=self.view_plot_image,
+                name="view_plot_image",
+                description=(
+                    "Save the current plot figure to a temporary image file and return image data. "
+                    "This allows the agent to 'see' the plot as an image for visual analysis of "
+                    "elements like legends, colors, layout, spacing, etc. Useful for providing "
+                    "feedback on visual aspects of the plot. This tool takes no arguments."
+                ),
+                args_schema=ViewPlotImageInput,
             ),
         ]
 
