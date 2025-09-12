@@ -168,6 +168,8 @@ plot_summary = "A test scatter plot"
     from plot_agent.agent import PlotAgent
     mock_agent = Mock(spec=PlotAgent)
     mock_agent.execution_env = exec_env
+    mock_agent.debug = False  # Add debug attribute
+    mock_agent._logger = Mock()  # Add logger attribute
     
     # Call view_plot_image - this will likely fall back to HTML due to missing Chrome
     result = PlotAgent.view_plot_image(mock_agent)

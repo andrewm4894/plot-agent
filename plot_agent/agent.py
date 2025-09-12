@@ -261,6 +261,9 @@ class PlotAgent:
         if self.execution_env.fig is None:
             return "No figure has been created yet. Please execute code to create a figure first."
         
+        temp_path = None
+        html_path = None
+        
         try:
             # Create a temporary file to save the image
             with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
@@ -322,7 +325,7 @@ Please be specific about what you observe and suggest concrete improvements."""
                     response = vision_llm.invoke([multimodal_message])
                     visual_analysis = response.content
                     
-                    return f"""🔍 **VISUAL ANALYSIS RESULTS** (Agent can see the plot!):
+                    result = f"""🔍 **VISUAL ANALYSIS RESULTS** (Agent can see the plot!):
 
 {visual_analysis}
 
@@ -330,21 +333,45 @@ Please be specific about what you observe and suggest concrete improvements."""
 📊 **Image Details:**
 - Format: PNG (800x600, scale=2)
 - Size: {len(img_bytes)} bytes  
-- Saved to: {temp_path}
+- Temporary file: {temp_path} (cleaned up)
 
 ✨ The agent has visually analyzed the actual plot image and can now provide specific, targeted improvements based on what it actually sees."""
+                    
+                    # Clean up the temporary PNG file
+                    try:
+                        if os.path.exists(temp_path):
+                            os.unlink(temp_path)
+                            if self.debug:
+                                self._logger.debug(f"Cleaned up temporary file: {temp_path}")
+                    except Exception as cleanup_error:
+                        if self.debug:
+                            self._logger.debug(f"Failed to clean up {temp_path}: {cleanup_error}")
+                    
+                    return result
 
                 except Exception as vision_error:
                     # Fallback if vision LLM fails
-                    return f"""⚠️ **Vision analysis failed**: {str(vision_error)}
+                    result = f"""⚠️ **Vision analysis failed**: {str(vision_error)}
 
 📊 **Fallback - Image saved successfully:**
 - Format: PNG (800x600, scale=2) 
 - Size: {len(img_bytes)} bytes
-- Saved to: {temp_path}
+- Temporary file: {temp_path} (cleaned up)
 - Base64 available: data:image/png;base64,{img_base64[:50]}...[truncated]
 
 💡 **Note**: Vision analysis requires a compatible model (gpt-4o, gpt-4-vision-preview, etc.) and valid API access. The plot image is saved and available for manual inspection."""
+                    
+                    # Clean up the temporary PNG file
+                    try:
+                        if os.path.exists(temp_path):
+                            os.unlink(temp_path)
+                            if self.debug:
+                                self._logger.debug(f"Cleaned up temporary file: {temp_path}")
+                    except Exception as cleanup_error:
+                        if self.debug:
+                            self._logger.debug(f"Failed to clean up {temp_path}: {cleanup_error}")
+                    
+                    return result
                 
             except Exception as image_error:
                 # Fallback: save as HTML when PNG fails
@@ -352,10 +379,10 @@ Please be specific about what you observe and suggest concrete improvements."""
                 with open(html_path, 'w') as f:
                     f.write(self.execution_env.fig.to_html())
                 
-                return f"""⚠️ **PNG export failed**: {str(image_error)}
+                result = f"""⚠️ **PNG export failed**: {str(image_error)}
 
 📄 **Fallback - Plot saved as HTML:**
-- Path: {html_path}
+- Path: {html_path} (cleaned up)
 - Format: Interactive HTML plot
 
 ❌ **Vision analysis not available**: Requires PNG format for multimodal LLM analysis.
@@ -363,7 +390,31 @@ Please be specific about what you observe and suggest concrete improvements."""
 
 The plot structure and data are available through other tools, but visual analysis requires image format."""
                 
+                # Clean up both temp files
+                for path_to_clean in [temp_path, html_path]:
+                    if path_to_clean and os.path.exists(path_to_clean):
+                        try:
+                            os.unlink(path_to_clean)
+                            if self.debug:
+                                self._logger.debug(f"Cleaned up temporary file: {path_to_clean}")
+                        except Exception as cleanup_error:
+                            if self.debug:
+                                self._logger.debug(f"Failed to clean up {path_to_clean}: {cleanup_error}")
+                
+                return result
+                
         except Exception as e:
+            # Clean up any temp files that might have been created
+            for path_to_clean in [temp_path, html_path]:
+                if path_to_clean and os.path.exists(path_to_clean):
+                    try:
+                        os.unlink(path_to_clean)
+                        if self.debug:
+                            self._logger.debug(f"Cleaned up temporary file: {path_to_clean}")
+                    except Exception as cleanup_error:
+                        if self.debug:
+                            self._logger.debug(f"Failed to clean up {path_to_clean}: {cleanup_error}")
+            
             return f"❌ **Error in visual analysis**: {str(e)}"
 
     def _initialize_agent(self):
