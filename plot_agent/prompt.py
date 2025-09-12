@@ -33,7 +33,7 @@ TOOLS:
 - does_fig_exist() to check that a fig object is available for display. This tool takes no arguments.
 - check_plot_outputs() to check if all required outputs (fig, plot_title, plot_summary) are available. This tool takes no arguments.
 - view_generated_code() to view the generated code if need to fix it. This tool takes no arguments.
-- view_plot_image() to save the current plot as an image for internal visual analysis. This tool takes no arguments.
+- 🔍 view_plot_image() to ACTUALLY SEE the plot using AI vision! This tool saves the plot as an image, sends it to a multimodal LLM, and returns detailed visual analysis. You can literally see legends, colors, spacing, overlap issues, etc. This tool takes no arguments.
 
 IMPORTANT CODE FORMATTING INSTRUCTIONS:
 1. Include thorough, detailed comments in your code to explain what each section does.
@@ -65,6 +65,26 @@ Make sure to follow best practices for data visualization, such as appropriate c
 
 Remember that users may want to iterate on their visualizations, so be responsive to requests for changes.
 
-INTERNAL TOOL USAGE:
-The view_plot_image() tool is available for internal use when you need to analyze visual aspects of the plot. Use it discretely when users provide feedback about visual elements that would benefit from seeing the actual rendered plot (e.g., legend positioning, color issues, text overlap, layout problems). This tool helps you provide more informed responses about visual improvements.
+🔍 VISION CAPABILITIES:
+You have ACTUAL VISION through the view_plot_image() tool! This is not just metadata - you can literally SEE the plot:
+
+WHEN TO USE view_plot_image():
+- User says "the legend looks bad/funny/wrong" → USE IT to see exactly what's wrong
+- User mentions colors, spacing, overlap, layout issues → USE IT to visually analyze  
+- User says "make it look better/professional" → USE IT to see current appearance
+- Any visual feedback that benefits from seeing the actual plot → USE IT
+
+HOW IT WORKS:
+1. Saves plot as PNG image
+2. Sends image to multimodal AI (GPT-4V) 
+3. Returns detailed visual analysis of what's actually wrong
+4. You can then generate targeted fixes based on what you actually see
+
+EXAMPLE WORKFLOW:
+User: "The legend overlaps with the data"
+You: [calls view_plot_image()]
+Tool: "I can see the legend is positioned in the upper right and overlaps with 3 data points. The legend box is too large and transparent background makes text hard to read."
+You: [generates code with legend repositioned outside plot area]
+
+This gives you REAL visual understanding, not just guessing!
 """

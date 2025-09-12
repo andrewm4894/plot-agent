@@ -239,13 +239,21 @@ class PlotAgent:
         """
         return self.generated_code or ""
 
-    def view_plot_image(self, *args, **kwargs) -> str:
+    def view_plot_image(self, analysis_prompt: Optional[str] = None) -> str:
         """
-        Save the current plot figure to a temporary image file and return information about it.
-        This allows the agent to "see" the plot as an image for multimodal analysis.
+        Analyze the current plot using vision capabilities - the agent can actually "see" the plot!
         
+        This method:
+        1. Saves the plot as a PNG image
+        2. Creates a multimodal message with the image
+        3. Sends it to a vision-capable LLM for analysis
+        4. Returns the visual analysis results
+        
+        Args:
+            analysis_prompt: Optional custom prompt for the visual analysis
+            
         Returns:
-            str: Information about the saved image including file path and base64 encoded data
+            str: Visual analysis of the plot from the vision-capable LLM
         """
         if not self.execution_env:
             return "No execution environment has been initialized. Please set a dataframe first."
@@ -258,45 +266,105 @@ class PlotAgent:
             with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
                 temp_path = tmp_file.name
             
-            # Save the figure as PNG using plotly's to_image method
-            # This requires kaleido package, but we'll use plotly's built-in HTML export as fallback
+            # Try to save as PNG image for vision analysis
             try:
-                # Try to save as PNG image
+                # Get PNG image bytes
                 img_bytes = self.execution_env.fig.to_image(format="png", width=800, height=600, scale=2)
                 with open(temp_path, 'wb') as f:
                     f.write(img_bytes)
                 
-                # Also encode as base64 for inline viewing
+                # Encode as base64 for multimodal message
                 img_base64 = base64.b64encode(img_bytes).decode('utf-8')
                 
-                return f"""Plot image saved successfully!
+                # Create the analysis prompt
+                if not analysis_prompt:
+                    analysis_prompt = """Analyze this plot image and provide detailed feedback on:
 
-Temporary file path: {temp_path}
-Image format: PNG (800x600, scale=2)
-File size: {len(img_bytes)} bytes
+1. **Legend Issues**: Position, overlap with data, readability, size
+2. **Color Problems**: Contrast, distinguishability, accessibility  
+3. **Layout Issues**: Spacing, margins, title placement, axis labels
+4. **Text Problems**: Font sizes, label overlap, readability
+5. **Data Visualization**: Clarity, effectiveness, visual hierarchy
+6. **Overall Aesthetics**: Professional appearance, visual balance
 
-Base64 encoded image data (for inline viewing):
-data:image/png;base64,{img_base64[:100]}...[truncated]
+Please be specific about what you observe and suggest concrete improvements."""
 
-The agent can now analyze this visual representation of the plot to provide feedback on visual elements like legends, colors, layout, etc."""
+                # Create multimodal message with image
+                multimodal_message = HumanMessage(
+                    content=[
+                        {
+                            "type": "text",
+                            "text": analysis_prompt
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/png;base64,{img_base64}"
+                            }
+                        }
+                    ]
+                )
                 
-            except Exception as e:
-                # Fallback: save as HTML and inform about the limitation
-                with open(temp_path.replace('.png', '.html'), 'w') as f:
+                # Use vision-capable LLM for analysis
+                try:
+                    # Create a vision-capable LLM instance
+                    vision_llm = ChatOpenAI(
+                        model="gpt-4o",  # Vision-capable model
+                        temperature=0.1,
+                        timeout=30,
+                        max_retries=1
+                    )
+                    
+                    # Get visual analysis from the LLM
+                    if self.debug:
+                        self._logger.debug("Sending plot image to vision LLM for analysis")
+                    
+                    response = vision_llm.invoke([multimodal_message])
+                    visual_analysis = response.content
+                    
+                    return f"""🔍 **VISUAL ANALYSIS RESULTS** (Agent can see the plot!):
+
+{visual_analysis}
+
+---
+📊 **Image Details:**
+- Format: PNG (800x600, scale=2)
+- Size: {len(img_bytes)} bytes  
+- Saved to: {temp_path}
+
+✨ The agent has visually analyzed the actual plot image and can now provide specific, targeted improvements based on what it actually sees."""
+
+                except Exception as vision_error:
+                    # Fallback if vision LLM fails
+                    return f"""⚠️ **Vision analysis failed**: {str(vision_error)}
+
+📊 **Fallback - Image saved successfully:**
+- Format: PNG (800x600, scale=2) 
+- Size: {len(img_bytes)} bytes
+- Saved to: {temp_path}
+- Base64 available: data:image/png;base64,{img_base64[:50]}...[truncated]
+
+💡 **Note**: Vision analysis requires a compatible model (gpt-4o, gpt-4-vision-preview, etc.) and valid API access. The plot image is saved and available for manual inspection."""
+                
+            except Exception as image_error:
+                # Fallback: save as HTML when PNG fails
+                html_path = temp_path.replace('.png', '.html')
+                with open(html_path, 'w') as f:
                     f.write(self.execution_env.fig.to_html())
                 
-                return f"""Plot saved as HTML (PNG export failed: {str(e)})
+                return f"""⚠️ **PNG export failed**: {str(image_error)}
 
-Temporary file path: {temp_path.replace('.png', '.html')}
-Image format: HTML (interactive plot)
+📄 **Fallback - Plot saved as HTML:**
+- Path: {html_path}
+- Format: Interactive HTML plot
 
-Note: PNG image export requires the 'kaleido' package. The plot has been saved as HTML instead.
-To enable PNG export, install kaleido: pip install kaleido
+❌ **Vision analysis not available**: Requires PNG format for multimodal LLM analysis.
+💡 **Solution**: Install kaleido for PNG export: `pip install kaleido`
 
-The agent cannot directly view the HTML plot as an image, but the plot structure and data are available through other tools."""
+The plot structure and data are available through other tools, but visual analysis requires image format."""
                 
         except Exception as e:
-            return f"Error saving plot image: {str(e)}"
+            return f"❌ **Error in visual analysis**: {str(e)}"
 
     def _initialize_agent(self):
         """Initialize a LangGraph ReAct agent with tools and keep API compatibility."""
@@ -344,10 +412,11 @@ The agent cannot directly view the HTML plot as an image, but the plot structure
                 func=self.view_plot_image,
                 name="view_plot_image",
                 description=(
-                    "Internal tool to save the current plot figure to a temporary image file and "
-                    "analyze its visual representation. Use when you need to examine visual elements "
-                    "like legends, colors, layout, or spacing to provide better feedback about plot "
-                    "appearance. This tool takes no arguments."
+                    "🔍 VISION TOOL: Analyze the current plot using multimodal AI - you can actually SEE the plot! "
+                    "This tool saves the plot as an image, sends it to a vision-capable LLM, and returns "
+                    "detailed visual analysis of legends, colors, layout, text overlap, spacing, and overall "
+                    "aesthetics. Use when users mention visual issues or when you need to understand what "
+                    "the plot actually looks like. This tool takes no arguments."
                 ),
                 args_schema=ViewPlotImageInput,
             ),
