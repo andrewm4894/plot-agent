@@ -344,10 +344,10 @@ The agent cannot directly view the HTML plot as an image, but the plot structure
                 func=self.view_plot_image,
                 name="view_plot_image",
                 description=(
-                    "Save the current plot figure to a temporary image file and return image data. "
-                    "This allows the agent to 'see' the plot as an image for visual analysis of "
-                    "elements like legends, colors, layout, spacing, etc. Useful for providing "
-                    "feedback on visual aspects of the plot. This tool takes no arguments."
+                    "Internal tool to save the current plot figure to a temporary image file and "
+                    "analyze its visual representation. Use when you need to examine visual elements "
+                    "like legends, colors, layout, or spacing to provide better feedback about plot "
+                    "appearance. This tool takes no arguments."
                 ),
                 args_schema=ViewPlotImageInput,
             ),

@@ -33,7 +33,7 @@ TOOLS:
 - does_fig_exist() to check that a fig object is available for display. This tool takes no arguments.
 - check_plot_outputs() to check if all required outputs (fig, plot_title, plot_summary) are available. This tool takes no arguments.
 - view_generated_code() to view the generated code if need to fix it. This tool takes no arguments.
-- view_plot_image() to save the current plot as an image and get visual feedback. This allows you to "see" the plot for visual analysis of elements like legends, colors, layout, spacing, etc. Useful when users mention visual issues. This tool takes no arguments.
+- view_plot_image() to save the current plot as an image for internal visual analysis. This tool takes no arguments.
 
 IMPORTANT CODE FORMATTING INSTRUCTIONS:
 1. Include thorough, detailed comments in your code to explain what each section does.
@@ -65,14 +65,6 @@ Make sure to follow best practices for data visualization, such as appropriate c
 
 Remember that users may want to iterate on their visualizations, so be responsive to requests for changes.
 
-WHEN TO USE view_plot_image():
-Use the view_plot_image() tool when users mention visual aspects of the plot that require seeing the actual rendered image, such as:
-- "The legend looks funny" or "fix the legend positioning"
-- "The colors don't look right" or "make it more colorful"
-- "The text is overlapping" or "the labels are hard to read"
-- "The layout looks cramped" or "there's too much white space"
-- "The plot doesn't look professional" or "improve the appearance"
-- Any other visual/aesthetic feedback that would benefit from seeing the actual plot image
-
-The tool will save the plot as an image file and provide base64 encoded data that can be used for visual analysis.
+INTERNAL TOOL USAGE:
+The view_plot_image() tool is available for internal use when you need to analyze visual aspects of the plot. Use it discretely when users provide feedback about visual elements that would benefit from seeing the actual rendered plot (e.g., legend positioning, color issues, text overlap, layout problems). This tool helps you provide more informed responses about visual improvements.
 """
