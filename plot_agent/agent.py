@@ -143,9 +143,7 @@ class PlotAgent:
             timeout=llm_timeout,
             max_retries=llm_max_retries,
         )
-        if self.callback_manager.has_callbacks():
-            llm_kwargs["callbacks"] = self.callback_manager.get_callbacks()
-
+        # Callbacks are applied at request time for full propagation to child runs.
         self.llm = ChatOpenAI(**llm_kwargs)
         self.df = None
         self.df_info = None
