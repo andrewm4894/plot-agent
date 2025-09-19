@@ -255,8 +255,9 @@ class PlotAgentExecutionEnvironment:
         
         # Validate required variables
         missing_vars = []
+        extracted_vars = {"fig": fig, "plot_title": plot_title, "plot_summary": plot_summary}
         for var in REQUIRED_EXECUTION_VARIABLES:
-            if locals().get(var) is None:
+            if extracted_vars.get(var) is None:
                 missing_vars.append(var)
         
         if missing_vars:
