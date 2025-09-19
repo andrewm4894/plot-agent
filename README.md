@@ -9,11 +9,44 @@ Built on LangGraph with tool-calling to reliably execute generated Plotly code i
 
 ## Installation
 
+### For Users
+
 You can install the package using pip:
 
 ```bash
 pip install plot-agent
 ```
+
+### For Developers
+
+To set up a local development environment:
+
+```bash
+# Clone the repository
+git clone https://github.com/andrewm4894/plot-agent.git
+cd plot-agent
+
+# Install dependencies and set up development environment
+make install
+
+# Copy environment template and configure your API keys
+cp .env.example .env
+# Edit .env with your API keys
+
+# Run tests to verify everything works
+make test
+
+# Try the agent
+make run-example-script
+```
+
+Available make targets:
+- `make install` - Set up local development environment
+- `make test` - Run the test suite
+- `make run-examples` - Run example notebooks
+- `make run-example-script` - Run the basic example script
+- `make clean` - Clean build artifacts
+- `make publish` - Build and publish to PyPI
 
 ## Usage
 
@@ -114,6 +147,7 @@ flowchart TD
 - Interactive visualization capabilities
 - LangGraph-based tool calling and control flow
 - Debug logging via `PlotAgent(debug=True)` or `PLOT_AGENT_DEBUG=1`
+- Optional PostHog LLM analytics via LangChain callbacks
 
 ## Requirements
 
@@ -145,6 +179,46 @@ make run-examples-debug
 ```bash
 make run-example-script
 ```
+
+## PostHog LLM analytics (optional)
+
+Plot Agent can stream agent traces to [PostHog LLM Analytics](https://posthog.com/docs/llm-analytics/installation/langchain) when the optional integration is enabled.
+
+1. Install the optional dependency:
+
+   ```bash
+   pip install posthog
+   ```
+
+2. Enable PostHog analytics and provide your project (public) API key via environment/.env:
+
+   ```bash
+   POSTHOG_LLM_ANALYTICS=true
+   POSTHOG_PUBLIC_KEY=phc_...
+   # optional override (defaults to https://us.i.posthog.com)
+   POSTHOG_HOST=https://app.posthog.com
+   ```
+
+   or pass the key when the agent is instantiated:
+
+   ```python
+   agent = PlotAgent(posthog_public_key="phc_...", posthog_host="https://app.posthog.com")
+   ```
+
+   If you already have a configured PostHog client (for example to set custom `distinct_id`
+   or `properties`), pass it directly:
+
+   ```python
+   from posthog import Posthog
+
+   posthog_client = Posthog("phc_...", host="https://app.posthog.com")
+   agent = PlotAgent(
+       posthog_client=posthog_client,
+       posthog_callback_options={"distinct_id": "user_123", "properties": {"conversation_id": "abc123"}},
+   )
+   ```
+
+When configured, LangChain callbacks emit generation traces, tool usage, and metadata directly to your PostHog project, making it easier to monitor agent runs alongside the rest of your analytics.
 
 ## License
 

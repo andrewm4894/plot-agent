@@ -23,20 +23,23 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from plot_agent.constants import (
+    DEFAULT_TIMEOUT_SECONDS,
+    ALLOWED_MODULES,
+    REQUIRED_EXECUTION_VARIABLES,
+    MISSING_VARIABLES_ERROR,
+    PLOT_TITLE_TYPE_ERROR,
+    PLOT_SUMMARY_TYPE_ERROR,
+    VALIDATION_ERRORS_PREFIX,
+    TIMEOUT_ERROR_MESSAGE,
+    CODE_REJECTED_ERROR_PREFIX,
+    CODE_EXECUTION_ERROR_PREFIX,
+    CODE_EXECUTION_SUCCESS_MESSAGE,
+)
+
 
 def _timeout_handler(signum, frame):
-    raise TimeoutError("Code execution timed out")
-
-
-# List of allowed modules
-_ALLOWED_MODULES = {
-    "pandas",
-    "numpy",
-    "matplotlib",
-    "plotly",
-    "sklearn",
-    "scipy",
-}
+    raise TimeoutError(TIMEOUT_ERROR_MESSAGE)
 
 
 # Wrap the real __import__ so only our allowlist can get in
@@ -48,7 +51,7 @@ def _safe_import(name, globals=None, locals=None, fromlist=(), level=0):
     Wrap the real __import__ so only our allowlist can get in
     """
     root = name.split(".", 1)[0]
-    if root in _ALLOWED_MODULES:
+    if root in ALLOWED_MODULES:
         return _orig_import(name, globals, locals, fromlist, level)
     # If the module is not in the allowlist, raise an ImportError
     raise ImportError(f"Import of module '{name}' is not allowed.")
@@ -68,7 +71,7 @@ class PlotAgentExecutionEnvironment:
       • Purge any old `fig` between runs
     """
 
-    TIMEOUT_SECONDS = 60
+    TIMEOUT_SECONDS = DEFAULT_TIMEOUT_SECONDS
 
     # A lean set of builtins, plus our safe-import hook
     _SAFE_BUILTINS = {
@@ -145,12 +148,12 @@ class PlotAgentExecutionEnvironment:
                 for alias in child.names:
                     root = alias.name.split(".", 1)[0]
                     # Check if the module is in the allowlist
-                    if root not in _ALLOWED_MODULES:
+                    if root not in ALLOWED_MODULES:
                         raise ValueError(f"Import of '{alias.name}' is not allowed.")
             # Check for import-froms
             elif isinstance(child, ast.ImportFrom):
                 root = (child.module or "").split(".", 1)[0]
-                if root not in _ALLOWED_MODULES:
+                if root not in ALLOWED_MODULES:
                     raise ValueError(f"Import-from of '{child.module}' is not allowed.")
             # Check for dunder attribute access
             elif isinstance(child, ast.Attribute) and child.attr.startswith("__"):
@@ -186,7 +189,7 @@ class PlotAgentExecutionEnvironment:
                 "plot_title": None,
                 "plot_summary": None,
                 "output": "",
-                "error": f"Code rejected on safety grounds: {e}",
+                "error": f"{CODE_REJECTED_ERROR_PREFIX}{e}",
                 "success": False,
             }
 
@@ -218,7 +221,7 @@ class PlotAgentExecutionEnvironment:
                 "plot_title": None,
                 "plot_summary": None,
                 "output": out_buf.getvalue(),
-                "error": f"Code execution timed out: {te}\n{tb}",
+                "error": f"{TIMEOUT_ERROR_MESSAGE}: {te}\n{tb}",
                 "success": False,
             }
         except Exception as e:
@@ -229,7 +232,7 @@ class PlotAgentExecutionEnvironment:
                 "plot_title": None,
                 "plot_summary": None,
                 "output": out_buf.getvalue(),
-                "error": f"Error executing code: {e}\n{tb}",
+                "error": f"{CODE_EXECUTION_ERROR_PREFIX}{e}\n{tb}",
                 "success": False,
             }
         finally:
@@ -252,12 +255,10 @@ class PlotAgentExecutionEnvironment:
         
         # Validate required variables
         missing_vars = []
-        if fig is None:
-            missing_vars.append("fig")
-        if plot_title is None:
-            missing_vars.append("plot_title")
-        if plot_summary is None:
-            missing_vars.append("plot_summary")
+        extracted_vars = {"fig": fig, "plot_title": plot_title, "plot_summary": plot_summary}
+        for var in REQUIRED_EXECUTION_VARIABLES:
+            if extracted_vars.get(var) is None:
+                missing_vars.append(var)
         
         if missing_vars:
             return {
@@ -265,16 +266,16 @@ class PlotAgentExecutionEnvironment:
                 "plot_title": plot_title,
                 "plot_summary": plot_summary,
                 "output": out_buf.getvalue(),
-                "error": f"Missing required variables: {', '.join(missing_vars)}. Please create variables named: {', '.join(missing_vars)}.",
+                "error": MISSING_VARIABLES_ERROR.format(missing_vars=', '.join(missing_vars)),
                 "success": False,
             }
         
         # Validate that plot_title and plot_summary are strings
         validation_errors = []
         if not isinstance(plot_title, str):
-            validation_errors.append("plot_title must be a string")
+            validation_errors.append(PLOT_TITLE_TYPE_ERROR)
         if not isinstance(plot_summary, str):
-            validation_errors.append("plot_summary must be a string")
+            validation_errors.append(PLOT_SUMMARY_TYPE_ERROR)
         
         if validation_errors:
             return {
@@ -282,7 +283,7 @@ class PlotAgentExecutionEnvironment:
                 "plot_title": plot_title,
                 "plot_summary": plot_summary,
                 "output": out_buf.getvalue(),
-                "error": f"Validation errors: {'; '.join(validation_errors)}.",
+                "error": f"{VALIDATION_ERRORS_PREFIX}{'; '.join(validation_errors)}.",
                 "success": False,
             }
 
@@ -291,7 +292,7 @@ class PlotAgentExecutionEnvironment:
             "fig": fig,
             "plot_title": plot_title,
             "plot_summary": plot_summary,
-            "output": "Code executed successfully. 'fig', 'plot_title', and 'plot_summary' objects were created.",
+            "output": CODE_EXECUTION_SUCCESS_MESSAGE,
             "error": "",
             "success": True,
         }

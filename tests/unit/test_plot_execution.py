@@ -64,7 +64,7 @@ plot_summary = "Test summary"
 """
 
     result = agent.execute_plotly_code(invalid_code)
-    assert "Error: Code rejected on safety grounds: '(' was never closed (<unknown>, line 2)" in result
+    assert "Error executing code: Code rejected on safety grounds: '(' was never closed (<unknown>, line 2)" in result
     assert agent.execution_env.fig is None
 
 
