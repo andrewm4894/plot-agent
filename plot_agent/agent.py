@@ -2,12 +2,13 @@
 This module contains the PlotAgent class, which is used to generate Plotly code based on a user's plot description.
 """
 
-import pandas as pd
-from io import StringIO
 import os
 import re
 import logging
-from typing import Optional
+from io import StringIO
+from typing import Optional, List, Any, Dict
+
+import pandas as pd
 from dotenv import load_dotenv
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -23,6 +24,43 @@ from plot_agent.models import (
     CheckPlotOutputsInput,
 )
 from plot_agent.execution import PlotAgentExecutionEnvironment
+from plot_agent.callbacks import create_callback_manager
+from plot_agent.constants import (
+    DEFAULT_MODEL,
+    DEFAULT_VERBOSE,
+    DEFAULT_MAX_ITERATIONS,
+    DEFAULT_EARLY_STOPPING_METHOD,
+    DEFAULT_HANDLE_PARSING_ERRORS,
+    DEFAULT_DEBUG,
+    DEFAULT_LLM_TEMPERATURE,
+    DEFAULT_LLM_TIMEOUT,
+    DEFAULT_LLM_MAX_RETRIES,
+    OPENAI_API_KEY_ENV_VAR,
+    PLOT_AGENT_DEBUG_ENV_VAR,
+    MISSING_API_KEY_ERROR,
+    MISSING_DF_ERROR,
+    EMPTY_DF_ERROR,
+    INVALID_DF_TYPE_ERROR,
+    INVALID_SQL_TYPE_ERROR,
+    INVALID_MESSAGE_TYPE_ERROR,
+    INVALID_CODE_TYPE_ERROR,
+    TOOL_EXECUTE_PLOTLY_CODE,
+    TOOL_DOES_FIG_EXIST,
+    TOOL_VIEW_GENERATED_CODE,
+    TOOL_CHECK_PLOT_OUTPUTS,
+    TOOL_DESCRIPTIONS,
+    EMPTY_MESSAGE_RESPONSE,
+    CODE_ONLY_MESSAGE_RESPONSE,
+    NO_DF_SET_RESPONSE,
+    FIG_AVAILABLE_RESPONSE,
+    NO_FIG_RESPONSE,
+    ALL_OUTPUTS_AVAILABLE_RESPONSE,
+    CODE_EXECUTION_SUCCESS_PREFIX,
+    CODE_EXECUTION_ERROR_PREFIX,
+    GUIDED_RETRY_MESSAGE,
+    DEFAULT_LOG_FORMAT,
+    DEFAULT_LOG_DATE_FORMAT,
+)
 
 
 class PlotAgent:
@@ -32,16 +70,20 @@ class PlotAgent:
 
     def __init__(
         self,
-        model: str = "gpt-4o-mini",
+        model: str = DEFAULT_MODEL,
         system_prompt: Optional[str] = None,
-        verbose: bool = True,
-        max_iterations: int = 10,
-        early_stopping_method: str = "force",
-        handle_parsing_errors: bool = True,
-        llm_temperature: float = 0.0,
-        llm_timeout: int = 60,
-        llm_max_retries: int = 1,
-        debug: bool = False,
+        verbose: bool = DEFAULT_VERBOSE,
+        max_iterations: int = DEFAULT_MAX_ITERATIONS,
+        early_stopping_method: str = DEFAULT_EARLY_STOPPING_METHOD,
+        handle_parsing_errors: bool = DEFAULT_HANDLE_PARSING_ERRORS,
+        llm_temperature: float = DEFAULT_LLM_TEMPERATURE,
+        llm_timeout: int = DEFAULT_LLM_TIMEOUT,
+        llm_max_retries: int = DEFAULT_LLM_MAX_RETRIES,
+        debug: bool = DEFAULT_DEBUG,
+        posthog_public_key: Optional[str] = None,
+        posthog_host: Optional[str] = None,
+        posthog_client: Optional[Any] = None,
+        posthog_callback_options: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize the PlotAgent.
@@ -53,15 +95,33 @@ class PlotAgent:
             max_iterations (int): Maximum number of iterations for the agent to take.
             early_stopping_method (str): Method to use for early stopping.
             handle_parsing_errors (bool): Whether to handle parsing errors gracefully.
+            posthog_public_key (Optional[str]): Optional PostHog public API key for LLM analytics.
+            posthog_host (Optional[str]): Optional PostHog ingestion host. Defaults to
+                "https://us.i.posthog.com" when a key is provided.
+            posthog_client (Optional[Any]): Optional pre-configured PostHog client instance.
+            posthog_callback_options (Optional[Dict[str, Any]]): Additional kwargs forwarded to
+                `posthog.ai.langchain.CallbackHandler` (e.g. `distinct_id`, `trace_id`).
         """
         # Load .env if present, then require a valid API key
         load_dotenv()
-        openai_api_key = os.getenv("OPENAI_API_KEY")
+        openai_api_key = os.getenv(OPENAI_API_KEY_ENV_VAR)
         if not openai_api_key:
-            raise RuntimeError(
-                "OPENAI_API_KEY is not set. Provide it via environment or a .env file."
-            )
-        self.debug = debug or os.getenv("PLOT_AGENT_DEBUG") == "1"
+            raise RuntimeError(MISSING_API_KEY_ERROR)
+        self.debug = debug or os.getenv(PLOT_AGENT_DEBUG_ENV_VAR) == "1"
+
+        # Set up callback handlers for analytics and monitoring
+        self.callback_manager = create_callback_manager(
+            posthog_public_key=posthog_public_key,
+            posthog_host=posthog_host,
+            posthog_client=posthog_client,
+            posthog_callback_options=posthog_callback_options,
+        )
+        
+        # Expose PostHog properties for backward compatibility
+        self.posthog_client = self.callback_manager.posthog_client
+        self.posthog_public_key = self.callback_manager.posthog_public_key
+        self.posthog_host = self.callback_manager.posthog_host
+        self.posthog_enabled = self.callback_manager.posthog_enabled
 
         # Configure logger
         self._logger = logging.getLogger("plot_agent")
@@ -71,18 +131,22 @@ class PlotAgent:
                 handler = logging.StreamHandler()
                 handler.setFormatter(
                     logging.Formatter(
-                        "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-                        datefmt="%H:%M:%S",
+                        DEFAULT_LOG_FORMAT,
+                        datefmt=DEFAULT_LOG_DATE_FORMAT,
                     )
                 )
                 self._logger.addHandler(handler)
 
-        self.llm = ChatOpenAI(
+        llm_kwargs = dict(
             model=model,
             temperature=llm_temperature,
             timeout=llm_timeout,
             max_retries=llm_max_retries,
         )
+        if self.callback_manager.has_callbacks():
+            llm_kwargs["callbacks"] = self.callback_manager.get_callbacks()
+
+        self.llm = ChatOpenAI(**llm_kwargs)
         self.df = None
         self.df_info = None
         self.df_head = None
@@ -112,11 +176,11 @@ class PlotAgent:
         """
 
         # Check df
-        assert isinstance(df, pd.DataFrame), "The dataframe must be a pandas dataframe."
-        assert not df.empty, "The dataframe must not be empty."
+        assert isinstance(df, pd.DataFrame), INVALID_DF_TYPE_ERROR
+        assert not df.empty, EMPTY_DF_ERROR
 
         if sql_query:
-            assert isinstance(sql_query, str), "The SQL query must be a string."
+            assert isinstance(sql_query, str), INVALID_SQL_TYPE_ERROR
 
         self.df = df
 
@@ -151,10 +215,10 @@ class PlotAgent:
         Returns:
             str: The result of the execution.
         """
-        assert isinstance(generated_code, str), "The generated code must be a string."
+        assert isinstance(generated_code, str), INVALID_CODE_TYPE_ERROR
 
         if not self.execution_env:
-            return "Error: No dataframe has been set. Please set a dataframe first."
+            return f"{CODE_EXECUTION_ERROR_PREFIX}{MISSING_DF_ERROR}"
 
         # Store this as the last generated code
         self.generated_code = generated_code
@@ -169,9 +233,9 @@ class PlotAgent:
 
         # Check if the code executed successfully
         if code_execution_success:
-            return f"Success: {code_execution_output}"
+            return f"{CODE_EXECUTION_SUCCESS_PREFIX}{code_execution_output}"
         else:
-            return f"Error: {code_execution_error}\n{code_execution_output}"
+            return f"{CODE_EXECUTION_ERROR_PREFIX}{code_execution_error}\n{code_execution_output}"
 
     def does_fig_exist(self, *args, **kwargs) -> str:
         """
@@ -185,12 +249,12 @@ class PlotAgent:
             str: A message indicating whether a figure is available for display.
         """
         if not self.execution_env:
-            return "No execution environment has been initialized. Please set a dataframe first."
+            return f"{CODE_EXECUTION_ERROR_PREFIX}{MISSING_DF_ERROR}"
 
         if self.execution_env.fig is not None:
-            return "A figure is available for display."
+            return FIG_AVAILABLE_RESPONSE
         else:
-            return "No figure has been created yet."
+            return NO_FIG_RESPONSE
 
     def check_plot_outputs(self, *args, **kwargs) -> str:
         """
@@ -204,7 +268,7 @@ class PlotAgent:
             str: A message indicating which plot outputs are available.
         """
         if not self.execution_env:
-            return "No execution environment has been initialized. Please set a dataframe first."
+            return f"{CODE_EXECUTION_ERROR_PREFIX}{MISSING_DF_ERROR}"
 
         available = []
         missing = []
@@ -225,7 +289,7 @@ class PlotAgent:
             missing.append("plot_summary")
         
         if not missing:
-            return "All required plot outputs are available: fig, plot_title, and plot_summary."
+            return ALL_OUTPUTS_AVAILABLE_RESPONSE
         else:
             status = f"Available: {', '.join(available) if available else 'none'}. Missing: {', '.join(missing)}."
             return status
@@ -243,39 +307,26 @@ class PlotAgent:
         tools = [
             Tool.from_function(
                 func=self.execute_plotly_code,
-                name="execute_plotly_code",
-                description=(
-                    "Execute the provided Plotly code and return a result indicating "
-                    "if the code executed successfully and if a figure object was created."
-                ),
+                name=TOOL_EXECUTE_PLOTLY_CODE,
+                description=TOOL_DESCRIPTIONS[TOOL_EXECUTE_PLOTLY_CODE],
                 args_schema=GeneratedCodeInput,
             ),
             StructuredTool.from_function(
                 func=self.does_fig_exist,
-                name="does_fig_exist",
-                description=(
-                    "Check if a figure exists and is available for display. "
-                    "This tool takes no arguments and returns a string indicating "
-                    "if a figure is available for display or not."
-                ),
+                name=TOOL_DOES_FIG_EXIST,
+                description=TOOL_DESCRIPTIONS[TOOL_DOES_FIG_EXIST],
                 args_schema=DoesFigExistInput,
             ),
             StructuredTool.from_function(
                 func=self.view_generated_code,
-                name="view_generated_code",
-                description=(
-                    "View the generated code. "
-                    "This tool takes no arguments and returns the generated code as a string."
-                ),
+                name=TOOL_VIEW_GENERATED_CODE,
+                description=TOOL_DESCRIPTIONS[TOOL_VIEW_GENERATED_CODE],
                 args_schema=ViewGeneratedCodeInput,
             ),
             StructuredTool.from_function(
                 func=self.check_plot_outputs,
-                name="check_plot_outputs",
-                description=(
-                    "Check if all required plot outputs (fig, plot_title, plot_summary) are available. "
-                    "This tool takes no arguments and returns the status of all plot outputs."
-                ),
+                name=TOOL_CHECK_PLOT_OUTPUTS,
+                description=TOOL_DESCRIPTIONS[TOOL_CHECK_PLOT_OUTPUTS],
                 args_schema=CheckPlotOutputsInput,
             ),
         ]
@@ -308,10 +359,10 @@ class PlotAgent:
 
     def process_message(self, user_message: str) -> str:
         """Process a user message and return the agent's response."""
-        assert isinstance(user_message, str), "The user message must be a string."
+        assert isinstance(user_message, str), INVALID_MESSAGE_TYPE_ERROR
 
         if not self.agent_executor:
-            return "Please set a dataframe first using set_df() method."
+            return NO_DF_SET_RESPONSE
 
         # Add user message to outward-facing chat history
         self.chat_history.append(HumanMessage(content=user_message))
@@ -321,9 +372,7 @@ class PlotAgent:
 
         # Short-circuit empty inputs to avoid graph recursion
         if user_message.strip() == "":
-            ai_content = (
-                "Please provide a non-empty plotting request (e.g., 'scatter x vs y')."
-            )
+            ai_content = EMPTY_MESSAGE_RESPONSE
             self.chat_history.append(AIMessage(content=ai_content))
             if self.debug:
                 self._logger.debug("empty message received; returning guidance without invoking graph")
@@ -335,9 +384,7 @@ class PlotAgent:
             user_message,
             flags=re.IGNORECASE,
         ):
-            ai_content = (
-                "I see a code snippet. Please describe the visualization you want (e.g., 'line chart of y over x')."
-            )
+            ai_content = CODE_ONLY_MESSAGE_RESPONSE
             self.chat_history.append(AIMessage(content=ai_content))
             if self.debug:
                 self._logger.debug("code-only message received; returning guidance without invoking graph")
@@ -349,9 +396,13 @@ class PlotAgent:
             self._logger.debug(f"process_message() user: {user_message}")
             self._logger.debug(f"graph message count before invoke: {len(graph_messages)}")
         # Invoke the LangGraph agent
+        invoke_config = {"recursion_limit": self.max_iterations}
+        if self.callback_manager.has_callbacks():
+            invoke_config["callbacks"] = self.callback_manager.get_callbacks()
+
         result = self.agent_executor.invoke(
             {"messages": graph_messages},
-            config={"recursion_limit": self.max_iterations},
+            config=invoke_config,
         )
 
         # Extract the latest AI message from the returned messages
@@ -402,17 +453,15 @@ class PlotAgent:
                 self._logger.debug("guided retry: prompting model to use execute_plotly_code tool")
             guided_messages = [
                 *self._graph_messages,
-                HumanMessage(
-                    content=(
-                        "Please use the execute_plotly_code(generated_code) tool with the FULL code to "
-                        "create a variable named 'fig', then call does_fig_exist(). Return the final "
-                        "code in a fenced ```python block."
-                    )
-                ),
+                HumanMessage(content=GUIDED_RETRY_MESSAGE),
             ]
+            retry_config = {"recursion_limit": max(3, self.max_iterations // 2)}
+            if self.callback_manager.has_callbacks():
+                retry_config["callbacks"] = self.callback_manager.get_callbacks()
+
             retry_result = self.agent_executor.invoke(
                 {"messages": guided_messages},
-                config={"recursion_limit": max(3, self.max_iterations // 2)},
+                config=retry_config,
             )
             self._graph_messages = retry_result.get("messages", [])
             retry_ai_messages = [
