@@ -24,6 +24,14 @@ from plot_agent.models import (
 )
 from plot_agent.execution import PlotAgentExecutionEnvironment
 
+# Optional PostHog integration
+try:
+    from posthog import Posthog
+    from posthog.ai.langchain import CallbackHandler as PostHogCallbackHandler
+    POSTHOG_AVAILABLE = True
+except ImportError:
+    POSTHOG_AVAILABLE = False
+
 
 class PlotAgent:
     """
@@ -76,6 +84,71 @@ class PlotAgent:
                     )
                 )
                 self._logger.addHandler(handler)
+
+        # Initialize PostHog for LLM analytics (optional)
+        self.posthog_client = None
+        self.posthog_callback_handler = None
+        posthog_enabled = os.getenv("POSTHOG_ENABLED", "false").lower() == "true"
+
+        if posthog_enabled:
+            if not POSTHOG_AVAILABLE:
+                self._logger.warning(
+                    "PostHog is enabled but the posthog package is not installed. "
+                    "Install it with: pip install posthog"
+                )
+            else:
+                posthog_api_key = os.getenv("POSTHOG_API_KEY")
+                posthog_host = os.getenv("POSTHOG_HOST", "https://app.posthog.com")
+
+                if not posthog_api_key:
+                    self._logger.warning(
+                        "POSTHOG_ENABLED is true but POSTHOG_API_KEY is not set. "
+                        "PostHog tracking will be disabled."
+                    )
+                else:
+                    try:
+                        # Build super_properties for session and span tracking
+                        super_properties = {
+                            "$ai_span_name": "plot_agent"
+                        }
+
+                        # Add session ID from environment if provided
+                        ai_session_id = os.getenv("POSTHOG_AI_SESSION_ID")
+                        if ai_session_id:
+                            super_properties["$ai_session_id"] = ai_session_id
+
+                        # Initialize PostHog client with super_properties
+                        self.posthog_client = Posthog(
+                            posthog_api_key,
+                            host=posthog_host,
+                            super_properties=super_properties
+                        )
+
+                        # Build callback handler config
+                        callback_config = {"client": self.posthog_client}
+
+                        # Add optional distinct_id
+                        distinct_id = os.getenv("POSTHOG_DISTINCT_ID")
+                        if distinct_id:
+                            callback_config["distinct_id"] = distinct_id
+
+                        # Add privacy mode setting
+                        privacy_mode = os.getenv("POSTHOG_PRIVACY_MODE", "false").lower() == "true"
+                        callback_config["privacy_mode"] = privacy_mode
+
+                        self.posthog_callback_handler = PostHogCallbackHandler(**callback_config)
+
+                        if self.debug:
+                            session_info = f"session_id={ai_session_id}" if ai_session_id else "no session"
+                            self._logger.debug(
+                                f"PostHog LLM analytics initialized (host={posthog_host}, "
+                                f"distinct_id={distinct_id or 'anonymous'}, "
+                                f"privacy_mode={privacy_mode}, {session_info})"
+                            )
+                    except Exception as e:
+                        self._logger.error(f"Failed to initialize PostHog: {e}")
+                        self.posthog_client = None
+                        self.posthog_callback_handler = None
 
         self.llm = ChatOpenAI(
             model=model,
@@ -348,10 +421,16 @@ class PlotAgent:
         if self.debug:
             self._logger.debug(f"process_message() user: {user_message}")
             self._logger.debug(f"graph message count before invoke: {len(graph_messages)}")
+
+        # Build config with optional PostHog callback
+        invoke_config = {"recursion_limit": self.max_iterations}
+        if self.posthog_callback_handler:
+            invoke_config["callbacks"] = [self.posthog_callback_handler]
+
         # Invoke the LangGraph agent
         result = self.agent_executor.invoke(
             {"messages": graph_messages},
-            config={"recursion_limit": self.max_iterations},
+            config=invoke_config,
         )
 
         # Extract the latest AI message from the returned messages
@@ -410,9 +489,14 @@ class PlotAgent:
                     )
                 ),
             ]
+            # Build config with optional PostHog callback for retry
+            retry_config = {"recursion_limit": max(3, self.max_iterations // 2)}
+            if self.posthog_callback_handler:
+                retry_config["callbacks"] = [self.posthog_callback_handler]
+
             retry_result = self.agent_executor.invoke(
                 {"messages": guided_messages},
-                config={"recursion_limit": max(3, self.max_iterations // 2)},
+                config=retry_config,
             )
             self._graph_messages = retry_result.get("messages", [])
             retry_ai_messages = [

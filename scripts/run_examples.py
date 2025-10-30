@@ -9,6 +9,7 @@ import logging
 from datetime import datetime
 import concurrent.futures
 import argparse
+import uuid
 
 def setup_logging():
     """
@@ -57,7 +58,7 @@ def run_notebook(notebook, logger):
         pm.execute_notebook(
             notebook,
             notebook,  # Run in place by using the same path for input and output
-            kernel_name='python3'
+            kernel_name='plot-agent'
         )
         execution_time = time.time() - start_time
         logger.info(f"Successfully executed: {notebook_name}")
@@ -70,15 +71,22 @@ def run_notebook(notebook, logger):
 def run_examples(max_workers=1):
     """
     Run all example notebooks in parallel and track execution times.
-    
+
     Args:
         max_workers (int): Maximum number of notebooks to run in parallel
     """
     logger = setup_logging()
-    
+
+    # Generate a session ID to group all notebook traces from this run
+    # This allows PostHog to track all notebooks executed together as one session
+    session_id = str(uuid.uuid4())
+    os.environ["POSTHOG_AI_SESSION_ID"] = session_id
+    logger.info(f"🔗 AI Session ID: {session_id}")
+    logger.info("All notebook traces in this run will be grouped together in PostHog\n")
+
     # Get the project root directory
     project_root = Path(__file__).parent.parent
-    
+
     # Path to examples directory
     examples_dir = project_root / 'examples'
     

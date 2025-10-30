@@ -12,17 +12,17 @@ test:
 
 run-examples:
 	@echo "Running example notebooks..."
-	python scripts/run_examples.py --max-workers 3
+	uv run python scripts/run_examples.py --max-workers 3
 
 .PHONY: run-examples-debug
 run-examples-debug:
 	@echo "Running example notebooks with PLOT_AGENT_DEBUG=1..."
-	PLOT_AGENT_DEBUG=1 python scripts/run_examples.py --max-workers 3
+	PLOT_AGENT_DEBUG=1 uv run python scripts/run_examples.py --max-workers 3
 
 .PHONY: run-example-script
 run-example-script:
 	@echo "Running examples/example.py..."
-	python examples/example.py
+	uv run python examples/example.py
 
 clean:
 	rm -rf build/
