@@ -2,6 +2,7 @@ import os
 from dotenv import load_dotenv
 import pandas as pd
 import numpy as np
+import uuid
 
 from datetime import datetime
 from plot_agent.agent import PlotAgent
@@ -10,6 +11,13 @@ from plot_agent.agent import PlotAgent
 def main() -> None:
     # Load environment variables (OPENAI_API_KEY)
     load_dotenv()
+
+    # Generate a session ID to group all traces from this example run
+    # Set as env var so PostHog can automatically track it
+    session_id = str(uuid.uuid4())
+    os.environ["POSTHOG_AI_SESSION_ID"] = session_id
+    print(f"🔗 AI Session ID: {session_id}")
+    print("All traces in this session will be grouped together in PostHog.\n")
 
     # Generate a random time series dataframe similar to example_0.ipynb
     data = {
@@ -24,7 +32,12 @@ def main() -> None:
     print(df.head().to_string(index=False))
 
     # Initialize the agent; allow more iterations to avoid premature recursion limits
-    agent = PlotAgent(max_iterations=20, llm_timeout=45, llm_max_retries=0, debug=True)
+    agent = PlotAgent(
+        max_iterations=20,
+        llm_timeout=45,
+        llm_max_retries=0,
+        debug=True
+    )
     agent.set_df(df)
 
     # Conversation steps analogous to the notebook
