@@ -37,3 +37,9 @@ class CheckPlotOutputsInput(BaseModel):
     """Model indicating that the check_plot_outputs function takes no arguments."""
 
     pass
+
+
+class ViewPlotImageInput(BaseModel):
+    """Model indicating that the view_plot_image function takes no arguments."""
+
+    pass
