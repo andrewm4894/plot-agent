@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.tools import Tool, StructuredTool
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 
 from plot_agent.prompt import DEFAULT_SYSTEM_PROMPT
@@ -369,10 +369,11 @@ class PlotAgent:
         )
 
         # Create a ReAct agent graph with the provided tools and system prompt
-        self._graph = create_react_agent(
+        # Using langchain.agents.create_agent (langchain 1.0+)
+        self._graph = create_agent(
             self.llm,
             tools,
-            prompt=self._system_message_content,
+            system_prompt=self._system_message_content,
             debug=self.debug,
         )
 
