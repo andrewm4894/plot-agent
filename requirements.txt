@@ -2,10 +2,10 @@ pandas
 numpy
 matplotlib
 plotly
-langchain-core
-langchain
-langchain-openai
-langgraph
+langchain-core>=1.0.0
+langchain>=1.0.0
+langchain-openai>=1.0.0
+langgraph>=1.0.0
 pydantic
 python-dotenv
 posthog
