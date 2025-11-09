@@ -369,11 +369,10 @@ class PlotAgent:
         )
 
         # Create a ReAct agent graph with the provided tools and system prompt
-        # langchain 1.0+ uses system_message instead of prompt
         self._graph = create_react_agent(
             self.llm,
             tools,
-            system_message=self._system_message_content,
+            prompt=self._system_message_content,
             debug=self.debug,
         )
 
