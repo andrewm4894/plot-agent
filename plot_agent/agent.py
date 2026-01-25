@@ -64,10 +64,25 @@ class PlotAgent:
         """
         # Load .env if present, then require a valid API key
         load_dotenv()
+
+        # Check for OpenRouter configuration first, fall back to OpenAI
+        openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+        openrouter_base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
         openai_api_key = os.getenv("OPENAI_API_KEY")
-        if not openai_api_key:
+
+        if openrouter_api_key:
+            # Use OpenRouter
+            self._llm_api_key = openrouter_api_key
+            self._llm_base_url = openrouter_base_url
+            self._llm_provider = "openrouter"
+        elif openai_api_key:
+            # Use OpenAI directly
+            self._llm_api_key = openai_api_key
+            self._llm_base_url = None
+            self._llm_provider = "openai"
+        else:
             raise RuntimeError(
-                "OPENAI_API_KEY is not set. Provide it via environment or a .env file."
+                "No LLM API key found. Set OPENROUTER_API_KEY or OPENAI_API_KEY via environment or a .env file."
             )
         self.debug = debug or os.getenv("PLOT_AGENT_DEBUG") == "1"
 
@@ -150,12 +165,21 @@ class PlotAgent:
                         self.posthog_client = None
                         self.posthog_callback_handler = None
 
-        self.llm = ChatOpenAI(
-            model=model,
-            temperature=llm_temperature,
-            timeout=llm_timeout,
-            max_retries=llm_max_retries,
-        )
+        # Build LLM kwargs - use OpenRouter or OpenAI based on config
+        llm_kwargs = {
+            "model": model,
+            "temperature": llm_temperature,
+            "timeout": llm_timeout,
+            "max_retries": llm_max_retries,
+            "api_key": self._llm_api_key,
+        }
+        if self._llm_base_url:
+            llm_kwargs["base_url"] = self._llm_base_url
+
+        if self.debug:
+            self._logger.debug(f"Using LLM provider: {self._llm_provider}, model: {model}")
+
+        self.llm = ChatOpenAI(**llm_kwargs)
         self.df = None
         self.df_info = None
         self.df_head = None
