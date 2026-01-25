@@ -1,0 +1,378 @@
+/* Vibe Plotter Custom Styles */
+
+/* Variables */
+:root {
+    --primary-color: #6366f1;
+    --primary-hover: #4f46e5;
+    --success-color: #10b981;
+    --error-color: #ef4444;
+    --warning-color: #f59e0b;
+    --bg-secondary: #f8fafc;
+    --border-color: #e2e8f0;
+    --text-muted: #64748b;
+}
+
+/* Layout */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1rem;
+}
+
+/* Header */
+.site-header {
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-hover));
+    color: white;
+    padding: 2rem 1rem;
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.site-header .title {
+    margin: 0;
+    font-size: 2.5rem;
+}
+
+.site-header .subtitle {
+    margin: 0.5rem 0 0;
+    opacity: 0.9;
+}
+
+/* Footer */
+.site-footer {
+    background: var(--bg-secondary);
+    padding: 1rem;
+    text-align: center;
+    margin-top: 3rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.site-footer p {
+    margin: 0;
+    color: var(--text-muted);
+}
+
+/* Sections */
+.section {
+    background: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.section h2 {
+    margin-top: 0;
+    color: var(--primary-color);
+    border-bottom: 2px solid var(--border-color);
+    padding-bottom: 0.5rem;
+}
+
+/* Dataset Picker */
+.dataset-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+
+@media (max-width: 768px) {
+    .dataset-options {
+        grid-template-columns: 1fr;
+    }
+}
+
+.dataset-option {
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+}
+
+.dataset-option h4 {
+    margin-top: 0;
+}
+
+.url-input-group {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.url-input {
+    flex: 1;
+}
+
+/* Data Preview */
+.data-preview-content {
+    margin-top: 1.5rem;
+}
+
+.dataset-info {
+    margin-bottom: 1rem;
+}
+
+.badges {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    background: var(--primary-color);
+    color: white;
+    border-radius: 20px;
+    font-size: 0.875rem;
+}
+
+.columns-list {
+    margin: 1rem 0;
+}
+
+.table-container {
+    overflow-x: auto;
+}
+
+.data-table {
+    width: 100%;
+    font-size: 0.875rem;
+}
+
+.data-table th,
+.data-table td {
+    padding: 0.5rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Chat Interface */
+.chat-messages {
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.chat-placeholder {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 2rem;
+}
+
+.chat-placeholder.disabled {
+    opacity: 0.7;
+}
+
+.chat-placeholder ul {
+    text-align: left;
+    display: inline-block;
+    margin-top: 1rem;
+}
+
+.chat-message {
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.75rem;
+    border-radius: 8px;
+}
+
+.user-message {
+    background: var(--primary-color);
+    color: white;
+    margin-left: 2rem;
+}
+
+.assistant-message {
+    background: white;
+    border: 1px solid var(--border-color);
+    margin-right: 2rem;
+}
+
+.message-header {
+    font-size: 0.75rem;
+    margin-bottom: 0.25rem;
+    opacity: 0.8;
+}
+
+.message-content p {
+    margin: 0;
+    white-space: pre-wrap;
+}
+
+.chat-input-group {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-end;
+}
+
+.chat-textarea {
+    flex: 1;
+    resize: vertical;
+    min-height: 80px;
+}
+
+.btn-send {
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+.btn-send:hover {
+    background: var(--primary-hover);
+}
+
+.btn-send:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Plot Display */
+.plot-placeholder {
+    text-align: center;
+    padding: 3rem;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    color: var(--text-muted);
+}
+
+.plot-title {
+    margin-bottom: 0.5rem;
+}
+
+.plot-summary {
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+}
+
+.plot-container {
+    margin: 1rem 0;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* Export Buttons */
+.export-buttons {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin: 1rem 0;
+}
+
+.btn-export {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    background: var(--bg-secondary);
+    color: var(--primary-color);
+    text-decoration: none;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    font-size: 0.875rem;
+}
+
+.btn-export:hover {
+    background: var(--primary-color);
+    color: white;
+}
+
+/* Code Viewer */
+.code-viewer {
+    margin-top: 1rem;
+}
+
+.code-viewer pre {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 1rem;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.875rem;
+}
+
+/* Loading Indicator */
+.loading {
+    display: none;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-muted);
+    padding: 1rem;
+}
+
+.htmx-request .loading,
+.htmx-request.loading {
+    display: flex;
+}
+
+.htmx-indicator {
+    display: none;
+}
+
+.htmx-request .htmx-indicator {
+    display: inline-block;
+}
+
+/* Messages */
+.success-message {
+    background: #d1fae5;
+    color: #065f46;
+    padding: 1rem;
+    border-radius: 4px;
+    margin-top: 1rem;
+}
+
+.error-message {
+    background: #fee2e2;
+    color: #991b1b;
+    padding: 1rem;
+    border-radius: 4px;
+    margin-top: 1rem;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+    .site-header .title {
+        font-size: 1.75rem;
+    }
+
+    .chat-input-group {
+        flex-direction: column;
+    }
+
+    .btn-send {
+        width: 100%;
+    }
+
+    .user-message,
+    .assistant-message {
+        margin-left: 0;
+        margin-right: 0;
+    }
+}
+
+/* Spinner */
+.spinner,
+[aria-busy="true"] {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
