@@ -7,28 +7,12 @@ import uuid
 from typing import Optional
 
 from fasthtml.common import *
-from starlette.responses import Response
+from monsterui.all import *
 
 from vibe_plotter.config import config
-from vibe_plotter.services.uci_service import DatasetService
+from vibe_plotter.services.uci_service import DatasetService, FEATURED_DATASETS
 from vibe_plotter.services.session_service import session_manager
 from vibe_plotter.services.agent_service import AgentService
-from vibe_plotter.components.layout import header, footer
-from vibe_plotter.components.dataset_picker import (
-    dataset_picker,
-    data_preview,
-    dataset_error,
-)
-from vibe_plotter.components.chat import (
-    chat_interface,
-    chat_messages_fragment,
-    chat_placeholder,
-)
-from vibe_plotter.components.plot_display import (
-    plot_display,
-    plot_content,
-    plot_error,
-)
 
 
 # PostHog JavaScript snippet
@@ -45,190 +29,411 @@ def posthog_script(session_id: str) -> Script:
             capture_pageview: true,
             capture_pageleave: true,
         }});
-        // Link to backend session
         window.VIBE_SESSION_ID = '{session_id}';
         posthog.register({{ '$ai_session_id': '{session_id}' }});
-
-        // Track custom events
         window.trackEvent = function(eventName, properties) {{
             posthog.capture(eventName, properties || {{}});
         }};
     """)
 
 
-# Custom CSS link
-custom_css = Link(rel="stylesheet", href="/static/custom.css")
-
 # Plotly JS CDN
 plotly_cdn = Script(src="https://cdn.plot.ly/plotly-2.27.0.min.js")
 
-# App headers
-app_headers = (
-    plotly_cdn,
-    custom_css,
-)
-
-# Create FastHTML app
+# Create FastHTML app with MonsterUI theme and session support
 app, rt = fast_app(
-    hdrs=app_headers,
-    pico=True,
-    static_path="vibe_plotter/static",
+    hdrs=(
+        Theme.blue.headers(),
+        plotly_cdn,
+    ),
+    secret_key=os.getenv("SESSION_SECRET", "vibe-plotter-secret-key-change-in-prod"),
 )
 
 
-def get_session(request) -> tuple[str, any]:
-    """Get or create session from request."""
-    session_id = request.cookies.get("vibe_session_id")
-    if not session_id:
-        session_id = str(uuid.uuid4())
-
+def get_session_state(session) -> tuple[str, any]:
+    """Get or create session state."""
+    if "session_id" not in session:
+        session["session_id"] = str(uuid.uuid4())
+    session_id = session["session_id"]
     state = session_manager.get_or_create(session_id)
     return session_id, state
 
 
+# === UI Components ===
+
+def navbar():
+    """Top navigation bar."""
+    return NavBar(
+        A("GitHub", href="https://github.com/andrewm4894/plot-agent", target="_blank"),
+        brand=DivLAligned(
+            UkIcon("bar-chart-2", height=28, width=28),
+            H3("Vibe Plotter", cls="ml-2"),
+        ),
+    )
+
+
+def dataset_picker_card(current_dataset: Optional[str] = None):
+    """Dataset picker card."""
+    dataset_options = [Option(d["name"], value=d["id"]) for d in FEATURED_DATASETS]
+
+    return Card(
+        Form(
+            Grid(
+                Div(
+                    Label("UCI Dataset", cls="uk-form-label"),
+                    Select(
+                        Option("Select a dataset...", value="", selected=True, disabled=True),
+                        *dataset_options,
+                        id="dataset_id",
+                        name="dataset_id",
+                        cls="uk-select",
+                    ),
+                    cls="col-span-2"
+                ),
+                Div(
+                    Button("Load", type="submit", cls=ButtonT.primary),
+                    cls="flex items-end"
+                ),
+                cols=3,
+                gap=4,
+            ),
+            hx_post="/load-dataset",
+            hx_target="#data-preview",
+            hx_swap="innerHTML",
+        ),
+        DividerSplit("OR", text_cls=TextPresets.muted_sm),
+        Form(
+            Grid(
+                Div(
+                    Label("CSV URL", cls="uk-form-label"),
+                    Input(id="url", name="url", placeholder="https://example.com/data.csv", cls="uk-input"),
+                    cls="col-span-2"
+                ),
+                Div(
+                    Button("Load URL", type="submit", cls=ButtonT.secondary),
+                    cls="flex items-end"
+                ),
+                cols=3,
+                gap=4,
+            ),
+            hx_post="/load-url",
+            hx_target="#data-preview",
+            hx_swap="innerHTML",
+        ),
+        Div(id="data-preview", cls="mt-4"),
+        header=Div(H4("Data Source"), P("Load a UCI dataset or provide a CSV URL", cls=TextPresets.muted_sm)),
+    )
+
+
+def data_preview_content(df, metadata: dict):
+    """Data preview content."""
+    rows = min(5, len(df))
+    preview_df = df.head(rows)
+
+    return Div(
+        DivFullySpaced(
+            Div(
+                P(Strong(metadata.get("name", "Dataset")), cls=TextT.lg),
+                P(f"{len(df):,} rows, {len(df.columns)} columns", cls=TextPresets.muted_sm),
+            ),
+            UkIcon("check-circle", cls="text-green-500", height=24, width=24),
+        ),
+        Div(
+            Table(
+                Thead(Tr(*[Th(str(col)[:15], cls="text-sm") for col in list(preview_df.columns)[:6]])),
+                Tbody(*[
+                    Tr(*[Td(str(preview_df.iloc[i, j])[:20], cls="text-sm") for j in range(min(6, len(preview_df.columns)))])
+                    for i in range(rows)
+                ]),
+                cls="uk-table uk-table-small uk-table-striped mt-2"
+            ),
+            cls="overflow-x-auto"
+        ),
+        cls="p-4 bg-base-200 rounded-lg"
+    )
+
+
+def data_error_content(error: str):
+    """Data error content."""
+    return Div(
+        DivLAligned(
+            UkIcon("alert-circle", cls="text-red-500"),
+            P(f"Error: {error}", cls="text-red-500 ml-2"),
+        ),
+        cls="p-4 bg-red-100 rounded-lg"
+    )
+
+
+def chat_card(chat_history: list, enabled: bool = False):
+    """Chat interface card."""
+    messages = []
+    for msg in chat_history:
+        if msg["role"] == "user":
+            messages.append(
+                Div(
+                    Div(msg["content"], cls="bg-primary text-primary-content p-3 rounded-lg inline-block max-w-[80%]"),
+                    cls="flex justify-end mb-3"
+                )
+            )
+        else:
+            messages.append(
+                Div(
+                    Div(msg["content"], cls="bg-base-200 p-3 rounded-lg inline-block max-w-[80%]"),
+                    cls="flex justify-start mb-3"
+                )
+            )
+
+    if not messages:
+        messages = [
+            Div(
+                P("Describe the visualization you want to create...", cls=TextPresets.muted_sm),
+                cls="text-center py-12"
+            )
+        ]
+
+    return Card(
+        Div(
+            *messages,
+            id="chat-messages",
+            cls="h-72 overflow-y-auto p-3 border rounded-lg bg-base-100"
+        ),
+        Form(
+            DivFullySpaced(
+                Input(
+                    id="message",
+                    name="message",
+                    placeholder="e.g., Create a scatter plot of sepal length vs petal width" if enabled else "Load a dataset first...",
+                    cls="uk-input flex-1 mr-2",
+                    disabled=not enabled,
+                ),
+                Button(
+                    UkIcon("send", height=18),
+                    type="submit",
+                    cls=ButtonT.primary,
+                    disabled=not enabled,
+                ),
+            ),
+            hx_post="/chat",
+            hx_target="#chat-messages",
+            hx_swap="beforeend",
+            hx_on__after_request="this.reset(); htmx.trigger('#plot-area', 'refresh');",
+            cls="mt-4",
+        ),
+        header=Div(H4("Chat"), P("Describe your visualization in natural language", cls=TextPresets.muted_sm)),
+    )
+
+
+def chat_message_fragment(user_msg: str, assistant_msg: str):
+    """Fragment for new chat messages."""
+    return Div(
+        Div(
+            Div(user_msg, cls="bg-primary text-primary-content p-3 rounded-lg inline-block max-w-[80%]"),
+            cls="flex justify-end mb-3"
+        ),
+        Div(
+            Div(assistant_msg, cls="bg-base-200 p-3 rounded-lg inline-block max-w-[80%]"),
+            cls="flex justify-start mb-3"
+        ),
+    )
+
+
+def plot_card(figure=None, title: str = None, summary: str = None, code: str = None):
+    """Plot display card."""
+    if figure:
+        plot_html = figure.to_html(include_plotlyjs=False, full_html=False, config={"displayModeBar": True})
+        content = Div(
+            H5(title, cls="mb-2") if title else None,
+            P(summary, cls=TextPresets.muted_sm + " mb-4") if summary else None,
+            Div(Safe(plot_html), cls="w-full min-h-[400px]"),
+            DivFullySpaced(
+                Div(),
+                Div(
+                    A(Button(UkIcon("download", height=14, cls="mr-1"), "HTML", cls=(ButtonT.secondary, "btn-sm")), href="/export/html"),
+                    A(Button(UkIcon("image", height=14, cls="mr-1"), "PNG", cls=(ButtonT.secondary, "btn-sm")), href="/export/png"),
+                    A(Button(UkIcon("code", height=14, cls="mr-1"), "Code", cls=(ButtonT.secondary, "btn-sm")), href="/export/code"),
+                    cls="space-x-2"
+                ),
+                cls="mt-4"
+            ),
+        )
+    else:
+        content = Div(
+            DivCentered(
+                UkIcon("bar-chart-2", height=64, width=64, cls="opacity-20"),
+                P("Your visualization will appear here", cls=TextPresets.muted_sm + " mt-4"),
+                cls="py-20"
+            ),
+        )
+
+    return Card(
+        Div(content, id="plot-content"),
+        header=Div(H4("Visualization"), P("Interactive Plotly chart", cls=TextPresets.muted_sm)),
+        id="plot-area",
+        hx_trigger="refresh",
+        hx_get="/plot-refresh",
+        hx_target="#plot-content",
+        hx_swap="innerHTML",
+    )
+
+
+def plot_content_fragment(figure=None, title: str = None, summary: str = None, code: str = None):
+    """Fragment for plot content refresh."""
+    if figure:
+        plot_html = figure.to_html(include_plotlyjs=False, full_html=False, config={"displayModeBar": True})
+        return Div(
+            H5(title, cls="mb-2") if title else None,
+            P(summary, cls=TextPresets.muted_sm + " mb-4") if summary else None,
+            Div(Safe(plot_html), cls="w-full min-h-[400px]"),
+            DivFullySpaced(
+                Div(),
+                Div(
+                    A(Button(UkIcon("download", height=14, cls="mr-1"), "HTML", cls=(ButtonT.secondary, "btn-sm")), href="/export/html"),
+                    A(Button(UkIcon("image", height=14, cls="mr-1"), "PNG", cls=(ButtonT.secondary, "btn-sm")), href="/export/png"),
+                    A(Button(UkIcon("code", height=14, cls="mr-1"), "Code", cls=(ButtonT.secondary, "btn-sm")), href="/export/code"),
+                    cls="space-x-2"
+                ),
+                cls="mt-4"
+            ),
+        )
+    else:
+        return Div(
+            DivCentered(
+                UkIcon("bar-chart-2", height=64, width=64, cls="opacity-20"),
+                P("Your visualization will appear here", cls=TextPresets.muted_sm + " mt-4"),
+                cls="py-20"
+            ),
+        )
+
+
+# === Routes ===
+
 @rt("/")
-def get(request):
+def get(session):
     """Main page."""
-    session_id, state = get_session(request)
+    session_id, state = get_session_state(session)
 
     has_data = state.df is not None
     has_viz = state.agent and AgentService.has_visualization(state.agent)
 
-    # Get visualization data if available
     viz_data = {}
     if has_viz:
         viz_data = AgentService.get_visualization_data(state.agent)
 
-    response = Titled(
-        "Vibe Plotter",
+    return (
+        Title("Vibe Plotter - AI-Powered Data Visualization"),
         posthog_script(session_id),
-        header(),
-        Main(
-            dataset_picker(
-                current_dataset=state.metadata.get("name") if state.metadata else None,
-                has_data=has_data
+        Container(
+            navbar(),
+            Div(
+                P("Create beautiful visualizations with natural language", cls=TextPresets.muted_sm),
+                cls="text-center mb-8"
             ),
-            chat_interface(
-                chat_history=state.chat_history,
-                enabled=has_data
+            Grid(
+                Div(
+                    dataset_picker_card(
+                        current_dataset=state.metadata.get("name") if state.metadata else None
+                    ),
+                    chat_card(
+                        chat_history=state.chat_history,
+                        enabled=has_data
+                    ),
+                    cls="space-y-6"
+                ),
+                Div(
+                    plot_card(
+                        figure=viz_data.get("figure"),
+                        title=viz_data.get("title"),
+                        summary=viz_data.get("summary"),
+                        code=viz_data.get("code"),
+                    ),
+                ),
+                cols_lg=2,
+                cols_md=1,
+                gap=6,
             ),
-            plot_display(
-                figure=viz_data.get("figure"),
-                title=viz_data.get("title"),
-                summary=viz_data.get("summary"),
-                code=viz_data.get("code"),
+            Div(
+                P("Powered by ", A("plot-agent", href="https://github.com/andrewm4894/plot-agent", cls="underline"), " and ", A("FastHTML", href="https://fastht.ml", cls="underline"), cls=TextPresets.muted_sm),
+                cls="text-center mt-12 pb-6"
             ),
-            cls="container"
+            cls=(ContainerT.xl, "py-6"),
         ),
-        footer(),
     )
-
-    # Set session cookie
-    resp = Response(
-        content=to_xml(response),
-        media_type="text/html"
-    )
-    resp.set_cookie("vibe_session_id", session_id, max_age=3600, httponly=True)
-    return resp
 
 
 @rt("/load-dataset")
-def post(request, dataset_id: int):
+def post(session, dataset_id: int):
     """Load a UCI dataset."""
-    session_id, state = get_session(request)
+    session_id, state = get_session_state(session)
 
     try:
-        # Load the dataset
         df, metadata = DatasetService.load_uci_dataset(dataset_id)
-
-        # Create agent and initialize with data
         agent = AgentService.create_agent(session_id)
         AgentService.initialize_agent_with_df(agent, df)
 
-        # Update session state
         state.df = df
         state.metadata = metadata
         state.agent = agent
         state.chat_history = []
 
-        # Track event
-        if config.POSTHOG_ENABLED:
-            Script(f"trackEvent('dataset_loaded', {{source: 'uci', dataset_id: {dataset_id}, name: '{metadata.get('name', '')}'}});")
-
-        return data_preview(df, metadata)
+        return data_preview_content(df, metadata)
 
     except Exception as e:
-        return dataset_error(str(e))
+        return data_error_content(str(e))
 
 
 @rt("/load-url")
-def post(request, url: str):
+def post(session, url: str):
     """Load a CSV from URL."""
-    session_id, state = get_session(request)
+    session_id, state = get_session_state(session)
 
     try:
-        # Load the dataset
         df, metadata = DatasetService.load_csv_from_url_sync(url)
-
-        # Create agent and initialize with data
         agent = AgentService.create_agent(session_id)
         AgentService.initialize_agent_with_df(agent, df)
 
-        # Update session state
         state.df = df
         state.metadata = metadata
         state.agent = agent
         state.chat_history = []
 
-        return data_preview(df, metadata)
+        return data_preview_content(df, metadata)
 
     except Exception as e:
-        return dataset_error(str(e))
+        return data_error_content(str(e))
 
 
 @rt("/chat")
-def post(request, message: str):
+def post(session, message: str):
     """Process a chat message."""
-    session_id, state = get_session(request)
+    session_id, state = get_session_state(session)
 
     if not state.agent:
-        return Div(
-            P("Please load a dataset first.", cls="error-message"),
-        )
+        return Div(P("Please load a dataset first.", cls="text-red-500 p-2"))
 
     if not message.strip():
-        return Div(
-            P("Please enter a message.", cls="error-message"),
-        )
+        return Div(P("Please enter a message.", cls="text-red-500 p-2"))
 
     try:
-        # Process the message
         response = AgentService.process_message_sync(state.agent, message)
-
-        # Add to chat history
         state.add_message("user", message)
         state.add_message("assistant", response)
-
-        # Return both messages for append
-        return chat_messages_fragment(message, response)
+        return chat_message_fragment(message, response)
 
     except Exception as e:
-        return Div(
-            P(f"Error: {str(e)}", cls="error-message"),
-        )
+        return Div(P(f"Error: {str(e)}", cls="text-red-500 p-2"))
 
 
 @rt("/plot-refresh")
-def get(request):
+def get(session):
     """Refresh the plot display."""
-    session_id, state = get_session(request)
+    session_id, state = get_session_state(session)
 
     if not state.agent:
-        return plot_content()
+        return plot_content_fragment()
 
     viz_data = AgentService.get_visualization_data(state.agent)
 
-    return plot_content(
+    return plot_content_fragment(
         figure=viz_data.get("figure"),
         title=viz_data.get("title"),
         summary=viz_data.get("summary"),
@@ -237,15 +442,14 @@ def get(request):
 
 
 @rt("/export/{format}")
-def get(request, format: str):
+def get(session, format: str):
     """Export the current figure."""
-    session_id, state = get_session(request)
+    from starlette.responses import Response
+
+    session_id, state = get_session_state(session)
 
     if not state.agent or not AgentService.has_visualization(state.agent):
-        return Response(
-            content="No visualization available",
-            status_code=404
-        )
+        return Response(content="No visualization available", status_code=404)
 
     try:
         if format == "html":
@@ -255,7 +459,6 @@ def get(request, format: str):
                 media_type="text/html",
                 headers={"Content-Disposition": "attachment; filename=plot.html"}
             )
-
         elif format == "png":
             content = state.agent.export_png()
             return Response(
@@ -263,7 +466,6 @@ def get(request, format: str):
                 media_type="image/png",
                 headers={"Content-Disposition": "attachment; filename=plot.png"}
             )
-
         elif format == "json":
             content = state.agent.export_json()
             return Response(
@@ -271,7 +473,6 @@ def get(request, format: str):
                 media_type="application/json",
                 headers={"Content-Disposition": "attachment; filename=plot.json"}
             )
-
         elif format == "code":
             content = state.agent.export_code()
             return Response(
@@ -279,18 +480,11 @@ def get(request, format: str):
                 media_type="text/plain",
                 headers={"Content-Disposition": "attachment; filename=plot.py"}
             )
-
         else:
-            return Response(
-                content="Invalid export format",
-                status_code=400
-            )
+            return Response(content="Invalid export format", status_code=400)
 
     except Exception as e:
-        return Response(
-            content=f"Export error: {str(e)}",
-            status_code=500
-        )
+        return Response(content=f"Export error: {str(e)}", status_code=500)
 
 
 @rt("/health")
@@ -300,37 +494,14 @@ def get():
 
 
 @rt("/reset")
-def post(request):
+def post(session):
     """Reset the current session."""
-    session_id, state = get_session(request)
-
+    session_id, state = get_session_state(session)
     state.df = None
     state.metadata = None
     state.agent = None
     state.chat_history = []
-
     return RedirectResponse("/", status_code=303)
-
-
-# Serve static files
-@rt("/static/{filepath:path}")
-def get(filepath: str):
-    """Serve static files."""
-    import mimetypes
-    from pathlib import Path
-
-    static_dir = Path(__file__).parent / "static"
-    file_path = static_dir / filepath
-
-    if not file_path.exists():
-        return Response(content="Not found", status_code=404)
-
-    content_type, _ = mimetypes.guess_type(str(file_path))
-    with open(file_path, "rb") as f:
-        return Response(
-            content=f.read(),
-            media_type=content_type or "application/octet-stream"
-        )
 
 
 def serve():
