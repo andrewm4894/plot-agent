@@ -64,10 +64,25 @@ class PlotAgent:
         """
         # Load .env if present, then require a valid API key
         load_dotenv()
+
+        # Check for OpenRouter configuration first, fall back to OpenAI
+        openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+        openrouter_base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
         openai_api_key = os.getenv("OPENAI_API_KEY")
-        if not openai_api_key:
+
+        if openrouter_api_key:
+            # Use OpenRouter
+            self._llm_api_key = openrouter_api_key
+            self._llm_base_url = openrouter_base_url
+            self._llm_provider = "openrouter"
+        elif openai_api_key:
+            # Use OpenAI directly
+            self._llm_api_key = openai_api_key
+            self._llm_base_url = None
+            self._llm_provider = "openai"
+        else:
             raise RuntimeError(
-                "OPENAI_API_KEY is not set. Provide it via environment or a .env file."
+                "No LLM API key found. Set OPENROUTER_API_KEY or OPENAI_API_KEY via environment or a .env file."
             )
         self.debug = debug or os.getenv("PLOT_AGENT_DEBUG") == "1"
 
@@ -150,12 +165,21 @@ class PlotAgent:
                         self.posthog_client = None
                         self.posthog_callback_handler = None
 
-        self.llm = ChatOpenAI(
-            model=model,
-            temperature=llm_temperature,
-            timeout=llm_timeout,
-            max_retries=llm_max_retries,
-        )
+        # Build LLM kwargs - use OpenRouter or OpenAI based on config
+        llm_kwargs = {
+            "model": model,
+            "temperature": llm_temperature,
+            "timeout": llm_timeout,
+            "max_retries": llm_max_retries,
+            "api_key": self._llm_api_key,
+        }
+        if self._llm_base_url:
+            llm_kwargs["base_url"] = self._llm_base_url
+
+        if self.debug:
+            self._logger.debug(f"Using LLM provider: {self._llm_provider}, model: {model}")
+
+        self.llm = ChatOpenAI(**llm_kwargs)
         self.df = None
         self.df_info = None
         self.df_head = None
@@ -553,3 +577,118 @@ class PlotAgent:
             self.execution_env.fig = None
             self.execution_env.plot_title = None
             self.execution_env.plot_summary = None
+
+    def load_from_url(self, url: str) -> None:
+        """
+        Load a DataFrame from a CSV URL.
+
+        Args:
+            url (str): URL pointing to a CSV file.
+
+        Raises:
+            httpx.HTTPError: If the URL request fails.
+            pd.errors.ParserError: If the CSV cannot be parsed.
+        """
+        import httpx
+
+        response = httpx.get(url, timeout=30.0, follow_redirects=True)
+        response.raise_for_status()
+
+        df = pd.read_csv(StringIO(response.text))
+        self.set_df(df)
+        self._source_url = url
+
+    @classmethod
+    def from_url(cls, url: str, **kwargs) -> "PlotAgent":
+        """
+        Create a PlotAgent instance with data loaded from a CSV URL.
+
+        Args:
+            url (str): URL pointing to a CSV file.
+            **kwargs: Arguments passed to PlotAgent.__init__
+
+        Returns:
+            PlotAgent: Instance with DataFrame loaded from URL.
+        """
+        agent = cls(**kwargs)
+        agent.load_from_url(url)
+        return agent
+
+    def export_html(self, full_html: bool = True, include_plotlyjs: bool = True) -> str:
+        """
+        Export the current figure as an interactive HTML string.
+
+        Args:
+            full_html (bool): If True, return complete HTML document.
+            include_plotlyjs (bool): If True, include plotly.js in output.
+
+        Returns:
+            str: HTML string representation of the figure.
+
+        Raises:
+            ValueError: If no figure is available.
+        """
+        if not self.execution_env or not self.execution_env.fig:
+            raise ValueError("No figure available to export. Create a visualization first.")
+
+        return self.execution_env.fig.to_html(
+            full_html=full_html,
+            include_plotlyjs=include_plotlyjs
+        )
+
+    def export_png(self, width: int = 1200, height: int = 800, scale: float = 2.0) -> bytes:
+        """
+        Export the current figure as PNG bytes.
+
+        Args:
+            width (int): Image width in pixels.
+            height (int): Image height in pixels.
+            scale (float): Scale factor for resolution.
+
+        Returns:
+            bytes: PNG image as bytes.
+
+        Raises:
+            ValueError: If no figure is available.
+            ImportError: If kaleido is not installed.
+        """
+        if not self.execution_env or not self.execution_env.fig:
+            raise ValueError("No figure available to export. Create a visualization first.")
+
+        try:
+            return self.execution_env.fig.to_image(
+                format="png",
+                width=width,
+                height=height,
+                scale=scale
+            )
+        except ValueError as e:
+            if "kaleido" in str(e).lower():
+                raise ImportError(
+                    "PNG export requires kaleido. Install it with: pip install kaleido"
+                ) from e
+            raise
+
+    def export_json(self) -> str:
+        """
+        Export the current figure as a Plotly JSON string.
+
+        Returns:
+            str: JSON string representation of the figure.
+
+        Raises:
+            ValueError: If no figure is available.
+        """
+        if not self.execution_env or not self.execution_env.fig:
+            raise ValueError("No figure available to export. Create a visualization first.")
+
+        return self.execution_env.fig.to_json()
+
+    def export_code(self) -> str:
+        """
+        Export the generated Python code that creates the current visualization.
+
+        Returns:
+            str: Python code string, or empty string if no code has been generated.
+        """
+        return self.generated_code or ""

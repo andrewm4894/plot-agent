@@ -29,3 +29,18 @@ clean:
 	rm -rf dist/
 	rm -rf *.egg-info/
 	rm -rf examples/executed/
+
+# Vibe Plotter App Commands
+.PHONY: app app-dev app-install
+
+app:
+	@echo "Starting Vibe Plotter app..."
+	uv run python -m vibe_plotter.app
+
+app-dev:
+	@echo "Starting Vibe Plotter app in development mode with auto-reload..."
+	uv run uvicorn vibe_plotter.app:app --reload --host 0.0.0.0 --port 8000
+
+app-install:
+	@echo "Installing vibe_plotter dependencies..."
+	uv add python-fasthtml monsterui uvicorn pandas numpy plotly kaleido ucimlrepo httpx posthog langchain-core langchain langchain-openai langgraph python-dotenv pydantic matplotlib

@@ -9,3 +9,5 @@ langgraph
 pydantic
 python-dotenv
 posthog
+httpx
+kaleido

@@ -106,6 +106,18 @@ flowchart TD
 - The wrapper persists full graph messages between turns and executes any returned code blocks to keep `fig` updated.
 - A safe execution environment runs code with an allowlist and a main-thread-only timeout.
 
+## Vibe Plotter Web App
+
+Try plot-agent in the browser with **Vibe Plotter** - a web app for creating visualizations with natural language.
+
+See [vibe_plotter/README.md](./vibe_plotter/README.md) for setup and deployment instructions.
+
+```bash
+# Quick start
+make app-install  # Install dependencies
+make app          # Run at http://localhost:8000
+```
+
 ## Features
 
 - AI-powered visualization generation
@@ -114,11 +126,27 @@ flowchart TD
 - Interactive visualization capabilities
 - LangGraph-based tool calling and control flow
 - Debug logging via `PlotAgent(debug=True)` or `PLOT_AGENT_DEBUG=1`
+- **OpenRouter support** - use any LLM provider via OpenRouter
 
 ## Requirements
 
-- Python 3.8 or higher
+- Python 3.12 or higher
 - Dependencies are automatically installed with the package
+
+## LLM Provider Configuration
+
+Plot Agent supports both OpenAI directly and OpenRouter (for access to multiple LLM providers).
+
+```bash
+# Option 1: OpenAI directly
+export OPENAI_API_KEY=sk-...
+
+# Option 2: OpenRouter (access Claude, Gemini, Llama, etc.)
+export OPENROUTER_API_KEY=sk-or-...
+export LLM_MODEL=anthropic/claude-3.5-sonnet  # or any OpenRouter model
+```
+
+If both are set, OpenRouter takes priority.
 
 ## Development
 

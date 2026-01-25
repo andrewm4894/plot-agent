@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: vibe-plotter
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: |
+      pip install -r requirements.txt
+      pip install -r vibe_plotter/requirements.txt
+      pip install -e .
+    startCommand: python -m vibe_plotter.app
+    healthCheckPath: /health
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        value: gpt-4o-mini
+      - key: POSTHOG_ENABLED
+        value: "true"
+      - key: POSTHOG_API_KEY
+        sync: false
+      - key: POSTHOG_HOST
+        value: https://us.i.posthog.com
+      - key: DEBUG
+        value: "false"
+      - key: SESSION_TTL_MINUTES
+        value: "60"
+      - key: PYTHON_VERSION
+        value: "3.12.0"

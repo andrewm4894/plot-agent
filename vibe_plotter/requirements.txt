@@ -1,0 +1,30 @@
+# Framework
+python-fasthtml
+monsterui
+uvicorn
+
+# Data & Visualization
+pandas>=2.0.0
+numpy>=1.24.0
+plotly>=5.18.0
+kaleido>=0.2.1
+
+# UCI datasets
+ucimlrepo>=0.0.7
+
+# HTTP client
+httpx>=0.27.0
+
+# Analytics
+posthog>=3.0.0
+
+# LangChain/LangGraph (for plot-agent)
+langchain-core
+langchain
+langchain-openai
+langgraph
+
+# Utils
+python-dotenv>=1.0.0
+pydantic
+matplotlib
