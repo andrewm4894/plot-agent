@@ -252,7 +252,7 @@ def data_error_content(error: str):
     )
 
 
-def chat_panel(chat_history: list, enabled: bool = False):
+def chat_panel(chat_history: list, enabled: bool = False, default_message: str = ""):
     """Collapsible chat panel for visualization requests."""
     # Build chat history content
     messages = []
@@ -279,6 +279,9 @@ def chat_panel(chat_history: list, enabled: bool = False):
         cls="max-h-48 overflow-y-auto mb-3 border-b pb-3"
     ) if messages else None
 
+    # Default message when dataset is loaded but no chat history
+    input_value = default_message if enabled and not chat_history else ""
+
     return Details(
         Summary(
             DivFullySpaced(
@@ -298,6 +301,7 @@ def chat_panel(chat_history: list, enabled: bool = False):
                     Input(
                         id="message",
                         name="message",
+                        value=input_value,
                         placeholder="Describe your visualization..." if enabled else "Load a dataset first...",
                         cls="uk-input flex-1 mr-2",
                         disabled=not enabled,
@@ -448,7 +452,8 @@ def get(session):
                 # Chat Panel
                 chat_panel(
                     chat_history=state.chat_history,
-                    enabled=has_data
+                    enabled=has_data,
+                    default_message="plot this" if has_data and not state.chat_history else "",
                 ),
 
                 # Visualization (at bottom)
@@ -473,6 +478,8 @@ def get(session):
 @rt("/load-dataset")
 def post(session, dataset_id: int):
     """Load a UCI dataset."""
+    from starlette.responses import Response
+
     session_id, state = get_session_state(session)
 
     try:
@@ -485,7 +492,8 @@ def post(session, dataset_id: int):
         state.agent = agent
         state.chat_history = []
 
-        return data_preview_content(df, metadata)
+        # Use HX-Redirect header to tell HTMX to redirect
+        return Response(content="", headers={"HX-Redirect": "/"})
 
     except Exception as e:
         return data_error_content(str(e))
@@ -494,6 +502,8 @@ def post(session, dataset_id: int):
 @rt("/load-url")
 def post(session, url: str):
     """Load a CSV from URL."""
+    from starlette.responses import Response
+
     session_id, state = get_session_state(session)
 
     try:
@@ -506,7 +516,8 @@ def post(session, url: str):
         state.agent = agent
         state.chat_history = []
 
-        return data_preview_content(df, metadata)
+        # Use HX-Redirect header to tell HTMX to redirect
+        return Response(content="", headers={"HX-Redirect": "/"})
 
     except Exception as e:
         return data_error_content(str(e))
