@@ -72,154 +72,253 @@ def navbar():
     )
 
 
-def dataset_picker_card(current_dataset: Optional[str] = None):
-    """Dataset picker card."""
+def settings_panel():
+    """Settings panel with data source configuration."""
     dataset_options = [Option(d["name"], value=d["id"]) for d in FEATURED_DATASETS]
 
-    return Card(
-        Form(
-            Grid(
-                Div(
-                    Label("UCI Dataset", cls="uk-form-label"),
-                    Select(
-                        Option("Select a dataset...", value="", selected=True, disabled=True),
-                        *dataset_options,
-                        id="dataset_id",
-                        name="dataset_id",
-                        cls="uk-select",
+    return Details(
+        Summary(
+            DivFullySpaced(
+                DivLAligned(
+                    UkIcon("settings", height=20, width=20, cls="mr-2"),
+                    Span("Settings & Data Source", cls="font-medium"),
+                ),
+                UkIcon("chevron-down", height=16, width=16, cls="transition-transform"),
+            ),
+            cls="cursor-pointer p-4 hover:bg-base-200 rounded-lg list-none"
+        ),
+        Div(
+            Div(
+                P("Load a dataset to start creating visualizations", cls=TextPresets.muted_sm + " mb-4"),
+                Grid(
+                    Form(
+                        DivLAligned(
+                            Div(
+                                Label("UCI Dataset", cls="uk-form-label text-sm"),
+                                Select(
+                                    Option("Select a dataset...", value="", selected=True, disabled=True),
+                                    *dataset_options,
+                                    id="dataset_id",
+                                    name="dataset_id",
+                                    cls="uk-select",
+                                ),
+                                cls="flex-1"
+                            ),
+                            Button("Load", type="submit", cls=ButtonT.primary + " ml-2"),
+                            cls="items-end"
+                        ),
+                        hx_post="/load-dataset",
+                        hx_target="#data-preview",
+                        hx_swap="innerHTML",
                     ),
-                    cls="col-span-2"
+                    Form(
+                        DivLAligned(
+                            Div(
+                                Label("Or CSV URL", cls="uk-form-label text-sm"),
+                                Input(id="url", name="url", placeholder="https://example.com/data.csv", cls="uk-input"),
+                                cls="flex-1"
+                            ),
+                            Button("Load", type="submit", cls=ButtonT.secondary + " ml-2"),
+                            cls="items-end"
+                        ),
+                        hx_post="/load-url",
+                        hx_target="#data-preview",
+                        hx_swap="innerHTML",
+                    ),
+                    cols_md=2,
+                    cols_sm=1,
+                    gap=4,
                 ),
-                Div(
-                    Button("Load", type="submit", cls=ButtonT.primary),
-                    cls="flex items-end"
-                ),
-                cols=3,
-                gap=4,
             ),
-            hx_post="/load-dataset",
-            hx_target="#data-preview",
-            hx_swap="innerHTML",
+            cls="px-4 pb-4"
         ),
-        DividerSplit("OR", text_cls=TextPresets.muted_sm),
-        Form(
-            Grid(
-                Div(
-                    Label("CSV URL", cls="uk-form-label"),
-                    Input(id="url", name="url", placeholder="https://example.com/data.csv", cls="uk-input"),
-                    cls="col-span-2"
+        cls="border rounded-lg bg-base-100",
+        open=True,
+    )
+
+
+def data_preview_panel(df=None, metadata: dict = None):
+    """Collapsible data preview panel."""
+    if df is not None and metadata:
+        rows = min(5, len(df))
+        preview_df = df.head(rows)
+
+        content = Div(
+            DivFullySpaced(
+                DivLAligned(
+                    UkIcon("check-circle", cls="text-green-500 mr-2", height=20, width=20),
+                    Span(Strong(metadata.get("name", "Dataset")), cls="mr-2"),
+                    Span(f"({len(df):,} rows, {len(df.columns)} cols)", cls=TextPresets.muted_sm),
                 ),
-                Div(
-                    Button("Load URL", type="submit", cls=ButtonT.secondary),
-                    cls="flex items-end"
-                ),
-                cols=3,
-                gap=4,
+                Button("Reset", cls=ButtonT.ghost + " btn-sm text-red-500", hx_post="/reset"),
             ),
-            hx_post="/load-url",
-            hx_target="#data-preview",
-            hx_swap="innerHTML",
+            Div(
+                Table(
+                    Thead(Tr(*[Th(str(col)[:12], cls="text-xs") for col in list(preview_df.columns)[:8]])),
+                    Tbody(*[
+                        Tr(*[Td(str(preview_df.iloc[i, j])[:15], cls="text-xs") for j in range(min(8, len(preview_df.columns)))])
+                        for i in range(rows)
+                    ]),
+                    cls="uk-table uk-table-small uk-table-striped"
+                ),
+                cls="overflow-x-auto mt-3"
+            ),
+        )
+        summary_icon = "database"
+        summary_text = f"Data Preview: {metadata.get('name', 'Dataset')}"
+        is_open = False
+    else:
+        content = Div(
+            P("No data loaded yet. Use the settings above to load a dataset.", cls=TextPresets.muted_sm + " text-center py-4"),
+        )
+        summary_icon = "database"
+        summary_text = "Data Preview"
+        is_open = False
+
+    return Details(
+        Summary(
+            DivLAligned(
+                UkIcon(summary_icon, height=18, width=18, cls="mr-2"),
+                Span(summary_text, cls="font-medium text-sm"),
+            ),
+            cls="cursor-pointer p-3 hover:bg-base-200 rounded-lg list-none"
         ),
-        Div(id="data-preview", cls="mt-4"),
-        header=Div(H4("Data Source"), P("Load a UCI dataset or provide a CSV URL", cls=TextPresets.muted_sm)),
+        Div(content, cls="px-3 pb-3", id="data-preview-content"),
+        cls="border rounded-lg bg-base-100",
+        id="data-preview",
+        open=is_open,
     )
 
 
 def data_preview_content(df, metadata: dict):
-    """Data preview content."""
+    """Data preview content for HTMX updates."""
     rows = min(5, len(df))
     preview_df = df.head(rows)
 
-    return Div(
-        DivFullySpaced(
-            Div(
-                P(Strong(metadata.get("name", "Dataset")), cls=TextT.lg),
-                P(f"{len(df):,} rows, {len(df.columns)} columns", cls=TextPresets.muted_sm),
+    # Return the full Details element to replace
+    return Details(
+        Summary(
+            DivLAligned(
+                UkIcon("database", height=18, width=18, cls="mr-2"),
+                Span(f"Data Preview: {metadata.get('name', 'Dataset')}", cls="font-medium text-sm"),
             ),
-            UkIcon("check-circle", cls="text-green-500", height=24, width=24),
+            cls="cursor-pointer p-3 hover:bg-base-200 rounded-lg list-none"
         ),
         Div(
-            Table(
-                Thead(Tr(*[Th(str(col)[:15], cls="text-sm") for col in list(preview_df.columns)[:6]])),
-                Tbody(*[
-                    Tr(*[Td(str(preview_df.iloc[i, j])[:20], cls="text-sm") for j in range(min(6, len(preview_df.columns)))])
-                    for i in range(rows)
-                ]),
-                cls="uk-table uk-table-small uk-table-striped mt-2"
+            DivFullySpaced(
+                DivLAligned(
+                    UkIcon("check-circle", cls="text-green-500 mr-2", height=20, width=20),
+                    Span(Strong(metadata.get("name", "Dataset")), cls="mr-2"),
+                    Span(f"({len(df):,} rows, {len(df.columns)} cols)", cls=TextPresets.muted_sm),
+                ),
+                Button("Reset", cls=ButtonT.ghost + " btn-sm text-red-500", hx_post="/reset"),
             ),
-            cls="overflow-x-auto"
+            Div(
+                Table(
+                    Thead(Tr(*[Th(str(col)[:12], cls="text-xs") for col in list(preview_df.columns)[:8]])),
+                    Tbody(*[
+                        Tr(*[Td(str(preview_df.iloc[i, j])[:15], cls="text-xs") for j in range(min(8, len(preview_df.columns)))])
+                        for i in range(rows)
+                    ]),
+                    cls="uk-table uk-table-small uk-table-striped"
+                ),
+                cls="overflow-x-auto mt-3"
+            ),
+            cls="px-3 pb-3"
         ),
-        cls="p-4 bg-base-200 rounded-lg"
+        cls="border rounded-lg bg-base-100",
+        id="data-preview",
+        open=True,
     )
 
 
 def data_error_content(error: str):
     """Data error content."""
-    return Div(
-        DivLAligned(
-            UkIcon("alert-circle", cls="text-red-500"),
-            P(f"Error: {error}", cls="text-red-500 ml-2"),
+    return Details(
+        Summary(
+            DivLAligned(
+                UkIcon("alert-circle", height=18, width=18, cls="mr-2 text-red-500"),
+                Span("Data Preview: Error", cls="font-medium text-sm text-red-500"),
+            ),
+            cls="cursor-pointer p-3 hover:bg-base-200 rounded-lg list-none"
         ),
-        cls="p-4 bg-red-100 rounded-lg"
+        Div(
+            P(f"Error loading data: {error}", cls="text-red-500 text-sm"),
+            cls="px-3 pb-3"
+        ),
+        cls="border border-red-200 rounded-lg bg-red-50",
+        id="data-preview",
+        open=True,
     )
 
 
-def chat_card(chat_history: list, enabled: bool = False):
-    """Chat interface card."""
+def chat_panel(chat_history: list, enabled: bool = False):
+    """Collapsible chat panel for visualization requests."""
+    # Build chat history content
     messages = []
     for msg in chat_history:
         if msg["role"] == "user":
             messages.append(
                 Div(
-                    Div(msg["content"], cls="bg-primary text-primary-content p-3 rounded-lg inline-block max-w-[80%]"),
-                    cls="flex justify-end mb-3"
+                    Div(msg["content"], cls="bg-primary text-primary-content px-3 py-2 rounded-lg inline-block max-w-[85%] text-sm"),
+                    cls="flex justify-end mb-2"
                 )
             )
         else:
             messages.append(
                 Div(
-                    Div(msg["content"], cls="bg-base-200 p-3 rounded-lg inline-block max-w-[80%]"),
-                    cls="flex justify-start mb-3"
+                    Div(msg["content"], cls="bg-base-200 px-3 py-2 rounded-lg inline-block max-w-[85%] text-sm"),
+                    cls="flex justify-start mb-2"
                 )
             )
 
-    if not messages:
-        messages = [
-            Div(
-                P("Describe the visualization you want to create...", cls=TextPresets.muted_sm),
-                cls="text-center py-12"
-            )
-        ]
+    # Chat history section (only shown when expanded and has messages)
+    history_section = Div(
+        *messages,
+        id="chat-messages",
+        cls="max-h-48 overflow-y-auto mb-3 border-b pb-3"
+    ) if messages else None
 
-    return Card(
-        Div(
-            *messages,
-            id="chat-messages",
-            cls="h-72 overflow-y-auto p-3 border rounded-lg bg-base-100"
-        ),
-        Form(
+    return Details(
+        Summary(
             DivFullySpaced(
-                Input(
-                    id="message",
-                    name="message",
-                    placeholder="e.g., Create a scatter plot of sepal length vs petal width" if enabled else "Load a dataset first...",
-                    cls="uk-input flex-1 mr-2",
-                    disabled=not enabled,
+                DivLAligned(
+                    UkIcon("message-circle", height=20, width=20, cls="mr-2"),
+                    Span("Chat", cls="font-medium"),
+                    Span(f"({len(chat_history)} messages)" if chat_history else "", cls=TextPresets.muted_sm + " ml-2") if chat_history else None,
                 ),
-                Button(
-                    UkIcon("send", height=18),
-                    type="submit",
-                    cls=ButtonT.primary,
-                    disabled=not enabled,
-                ),
+                UkIcon("chevron-down", height=16, width=16, cls="transition-transform"),
             ),
-            hx_post="/chat",
-            hx_target="#chat-messages",
-            hx_swap="beforeend",
-            hx_on__after_request="this.reset(); htmx.trigger('#plot-area', 'refresh');",
-            cls="mt-4",
+            cls="cursor-pointer p-4 hover:bg-base-200 rounded-lg list-none"
         ),
-        header=Div(H4("Chat"), P("Describe your visualization in natural language", cls=TextPresets.muted_sm)),
+        Div(
+            history_section,
+            Form(
+                DivFullySpaced(
+                    Input(
+                        id="message",
+                        name="message",
+                        placeholder="Describe your visualization..." if enabled else "Load a dataset first...",
+                        cls="uk-input flex-1 mr-2",
+                        disabled=not enabled,
+                    ),
+                    Button(
+                        UkIcon("send", height=18),
+                        type="submit",
+                        cls=ButtonT.primary,
+                        disabled=not enabled,
+                    ),
+                ),
+                hx_post="/chat",
+                hx_target="#chat-messages",
+                hx_swap="beforeend" if messages else "innerHTML",
+                hx_on__after_request="this.reset(); htmx.trigger('#plot-area', 'refresh');",
+            ),
+            cls="px-4 pb-4",
+            id="chat-content",
+        ),
+        cls="border rounded-lg bg-base-100",
+        open=True,  # Keep open by default since it's the main interaction point
     )
 
 
@@ -227,79 +326,91 @@ def chat_message_fragment(user_msg: str, assistant_msg: str):
     """Fragment for new chat messages."""
     return Div(
         Div(
-            Div(user_msg, cls="bg-primary text-primary-content p-3 rounded-lg inline-block max-w-[80%]"),
-            cls="flex justify-end mb-3"
+            Div(user_msg, cls="bg-primary text-primary-content px-4 py-2 rounded-2xl rounded-br-sm inline-block max-w-[85%] text-sm"),
+            cls="flex justify-end mb-2"
         ),
         Div(
-            Div(assistant_msg, cls="bg-base-200 p-3 rounded-lg inline-block max-w-[80%]"),
-            cls="flex justify-start mb-3"
+            Div(assistant_msg, cls="bg-base-200 px-4 py-2 rounded-2xl rounded-bl-sm inline-block max-w-[85%] text-sm"),
+            cls="flex justify-start mb-2"
         ),
     )
 
 
-def plot_card(figure=None, title: str = None, summary: str = None, code: str = None):
-    """Plot display card."""
+def plot_panel(figure=None, title: str = None, summary: str = None, code: str = None):
+    """Plot display panel at the bottom."""
     if figure:
-        plot_html = figure.to_html(include_plotlyjs=False, full_html=False, config={"displayModeBar": True})
+        plot_html = figure.to_html(include_plotlyjs=False, full_html=False, config={"displayModeBar": True, "responsive": True})
         content = Div(
-            H5(title, cls="mb-2") if title else None,
-            P(summary, cls=TextPresets.muted_sm + " mb-4") if summary else None,
-            Div(Safe(plot_html), cls="w-full min-h-[400px]"),
+            Div(
+                H5(title, cls="m-0") if title else None,
+                P(summary, cls=TextPresets.muted_sm + " mt-1") if summary else None,
+                cls="mb-3" if title or summary else None
+            ) if title or summary else None,
+            Div(Safe(plot_html), cls="w-full", style="min-height: 450px;"),
             DivFullySpaced(
                 Div(),
                 Div(
-                    A(Button(UkIcon("download", height=14, cls="mr-1"), "HTML", cls=(ButtonT.secondary, "btn-sm")), href="/export/html"),
-                    A(Button(UkIcon("image", height=14, cls="mr-1"), "PNG", cls=(ButtonT.secondary, "btn-sm")), href="/export/png"),
-                    A(Button(UkIcon("code", height=14, cls="mr-1"), "Code", cls=(ButtonT.secondary, "btn-sm")), href="/export/code"),
-                    cls="space-x-2"
+                    A(Button(UkIcon("download", height=14, cls="mr-1"), "HTML", cls=(ButtonT.ghost, "btn-sm")), href="/export/html"),
+                    A(Button(UkIcon("image", height=14, cls="mr-1"), "PNG", cls=(ButtonT.ghost, "btn-sm")), href="/export/png"),
+                    A(Button(UkIcon("code", height=14, cls="mr-1"), "Code", cls=(ButtonT.ghost, "btn-sm")), href="/export/code"),
+                    cls="space-x-1"
                 ),
-                cls="mt-4"
+                cls="mt-3 pt-3 border-t"
             ),
         )
     else:
         content = Div(
             DivCentered(
-                UkIcon("bar-chart-2", height=64, width=64, cls="opacity-20"),
+                UkIcon("bar-chart-2", height=80, width=80, cls="opacity-10"),
                 P("Your visualization will appear here", cls=TextPresets.muted_sm + " mt-4"),
+                P("Load a dataset and describe what you want to see", cls=TextPresets.muted_sm),
                 cls="py-20"
             ),
         )
 
     return Card(
         Div(content, id="plot-content"),
-        header=Div(H4("Visualization"), P("Interactive Plotly chart", cls=TextPresets.muted_sm)),
+        header=DivLAligned(
+            UkIcon("trending-up", height=20, width=20, cls="mr-2"),
+            H5("Visualization", cls="m-0"),
+        ),
         id="plot-area",
         hx_trigger="refresh",
         hx_get="/plot-refresh",
         hx_target="#plot-content",
         hx_swap="innerHTML",
+        body_cls="p-4",
     )
 
 
 def plot_content_fragment(figure=None, title: str = None, summary: str = None, code: str = None):
     """Fragment for plot content refresh."""
     if figure:
-        plot_html = figure.to_html(include_plotlyjs=False, full_html=False, config={"displayModeBar": True})
+        plot_html = figure.to_html(include_plotlyjs=False, full_html=False, config={"displayModeBar": True, "responsive": True})
         return Div(
-            H5(title, cls="mb-2") if title else None,
-            P(summary, cls=TextPresets.muted_sm + " mb-4") if summary else None,
-            Div(Safe(plot_html), cls="w-full min-h-[400px]"),
+            Div(
+                H5(title, cls="m-0") if title else None,
+                P(summary, cls=TextPresets.muted_sm + " mt-1") if summary else None,
+                cls="mb-3" if title or summary else None
+            ) if title or summary else None,
+            Div(Safe(plot_html), cls="w-full", style="min-height: 450px;"),
             DivFullySpaced(
                 Div(),
                 Div(
-                    A(Button(UkIcon("download", height=14, cls="mr-1"), "HTML", cls=(ButtonT.secondary, "btn-sm")), href="/export/html"),
-                    A(Button(UkIcon("image", height=14, cls="mr-1"), "PNG", cls=(ButtonT.secondary, "btn-sm")), href="/export/png"),
-                    A(Button(UkIcon("code", height=14, cls="mr-1"), "Code", cls=(ButtonT.secondary, "btn-sm")), href="/export/code"),
-                    cls="space-x-2"
+                    A(Button(UkIcon("download", height=14, cls="mr-1"), "HTML", cls=(ButtonT.ghost, "btn-sm")), href="/export/html"),
+                    A(Button(UkIcon("image", height=14, cls="mr-1"), "PNG", cls=(ButtonT.ghost, "btn-sm")), href="/export/png"),
+                    A(Button(UkIcon("code", height=14, cls="mr-1"), "Code", cls=(ButtonT.ghost, "btn-sm")), href="/export/code"),
+                    cls="space-x-1"
                 ),
-                cls="mt-4"
+                cls="mt-3 pt-3 border-t"
             ),
         )
     else:
         return Div(
             DivCentered(
-                UkIcon("bar-chart-2", height=64, width=64, cls="opacity-20"),
+                UkIcon("bar-chart-2", height=80, width=80, cls="opacity-10"),
                 P("Your visualization will appear here", cls=TextPresets.muted_sm + " mt-4"),
+                P("Load a dataset and describe what you want to see", cls=TextPresets.muted_sm),
                 cls="py-20"
             ),
         )
@@ -325,37 +436,36 @@ def get(session):
         Container(
             navbar(),
             Div(
-                P("Create beautiful visualizations with natural language", cls=TextPresets.muted_sm),
-                cls="text-center mb-8"
-            ),
-            Grid(
-                Div(
-                    dataset_picker_card(
-                        current_dataset=state.metadata.get("name") if state.metadata else None
-                    ),
-                    chat_card(
-                        chat_history=state.chat_history,
-                        enabled=has_data
-                    ),
-                    cls="space-y-6"
+                # Settings & Data Source (collapsible)
+                settings_panel(),
+
+                # Data Preview (collapsible)
+                data_preview_panel(
+                    df=state.df,
+                    metadata=state.metadata,
                 ),
-                Div(
-                    plot_card(
-                        figure=viz_data.get("figure"),
-                        title=viz_data.get("title"),
-                        summary=viz_data.get("summary"),
-                        code=viz_data.get("code"),
-                    ),
+
+                # Chat Panel
+                chat_panel(
+                    chat_history=state.chat_history,
+                    enabled=has_data
                 ),
-                cols_lg=2,
-                cols_md=1,
-                gap=6,
+
+                # Visualization (at bottom)
+                plot_panel(
+                    figure=viz_data.get("figure"),
+                    title=viz_data.get("title"),
+                    summary=viz_data.get("summary"),
+                    code=viz_data.get("code"),
+                ),
+
+                cls="space-y-4"
             ),
             Div(
                 P("Powered by ", A("plot-agent", href="https://github.com/andrewm4894/plot-agent", cls="underline"), " and ", A("FastHTML", href="https://fastht.ml", cls="underline"), cls=TextPresets.muted_sm),
-                cls="text-center mt-12 pb-6"
+                cls="text-center mt-8 pb-4"
             ),
-            cls=(ContainerT.xl, "py-6"),
+            cls=(ContainerT.lg, "py-4"),
         ),
     )
 
@@ -408,10 +518,10 @@ def post(session, message: str):
     session_id, state = get_session_state(session)
 
     if not state.agent:
-        return Div(P("Please load a dataset first.", cls="text-red-500 p-2"))
+        return Div(P("Please load a dataset first.", cls="text-red-500 text-sm p-2"))
 
     if not message.strip():
-        return Div(P("Please enter a message.", cls="text-red-500 p-2"))
+        return Div(P("Please enter a message.", cls="text-red-500 text-sm p-2"))
 
     try:
         response = AgentService.process_message_sync(state.agent, message)
@@ -420,7 +530,7 @@ def post(session, message: str):
         return chat_message_fragment(message, response)
 
     except Exception as e:
-        return Div(P(f"Error: {str(e)}", cls="text-red-500 p-2"))
+        return Div(P(f"Error: {str(e)}", cls="text-red-500 text-sm p-2"))
 
 
 @rt("/plot-refresh")
