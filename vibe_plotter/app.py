@@ -272,12 +272,12 @@ def chat_panel(chat_history: list, enabled: bool = False, default_message: str =
                 )
             )
 
-    # Chat history section (only shown when expanded and has messages)
+    # Chat history section - always include the div so HTMX has a target
     history_section = Div(
         *messages,
         id="chat-messages",
-        cls="max-h-48 overflow-y-auto mb-3 border-b pb-3"
-    ) if messages else None
+        cls="max-h-48 overflow-y-auto mb-3 border-b pb-3" if messages else "hidden"
+    )
 
     # Default message when dataset is loaded but no chat history
     input_value = default_message if enabled and not chat_history else ""
@@ -315,8 +315,8 @@ def chat_panel(chat_history: list, enabled: bool = False, default_message: str =
                 ),
                 hx_post="/chat",
                 hx_target="#chat-messages",
-                hx_swap="beforeend" if messages else "innerHTML",
-                hx_on__after_request="this.reset(); htmx.trigger('#plot-area', 'refresh');",
+                hx_swap="beforeend",
+                hx_on__after_request="this.reset(); document.getElementById('chat-messages').classList.remove('hidden'); htmx.trigger('#plot-area', 'refresh');",
             ),
             cls="px-4 pb-4",
             id="chat-content",
