@@ -26,4 +26,4 @@ services:
       - key: SESSION_TTL_MINUTES
         value: "60"
       - key: PYTHON_VERSION
-        value: "3.11"
+        value: "3.12.0"
