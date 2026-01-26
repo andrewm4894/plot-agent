@@ -107,10 +107,8 @@ class PlotAgent:
                     )
                 else:
                     try:
-                        # Build super_properties for session and span tracking
-                        super_properties = {
-                            "$ai_span_name": "plot_agent"
-                        }
+                        # Build super_properties for session tracking
+                        super_properties = {}
 
                         # Add session ID from environment if provided
                         ai_session_id = os.getenv("POSTHOG_AI_SESSION_ID")
