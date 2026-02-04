@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "plot-agent"
-version = "0.5.0"
+version = "0.5.1"
 authors = [
     { name="andrewm4894", email="andrewm4894@gmail.com" },
 ]
@@ -16,6 +16,21 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+dependencies = [
+    "pandas",
+    "numpy",
+    "matplotlib",
+    "plotly",
+    "kaleido",
+    "langchain-core",
+    "langchain-openai",
+    "langgraph",
+    "pydantic",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+posthog = ["posthog"]
 
 [project.urls]
 "Homepage" = "https://github.com/andrewm4894/plot-agent" 
