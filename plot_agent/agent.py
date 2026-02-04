@@ -7,10 +7,10 @@ from io import StringIO
 import os
 import re
 import logging
-from typing import Optional
+from typing import List, Optional, Union
 from dotenv import load_dotenv
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import Tool, StructuredTool
 from langgraph.prebuilt import create_react_agent
 from langchain_openai import ChatOpenAI
@@ -50,6 +50,7 @@ class PlotAgent:
         llm_timeout: int = 60,
         llm_max_retries: int = 1,
         debug: bool = False,
+        include_plot_image: bool = False,
     ):
         """
         Initialize the PlotAgent.
@@ -61,6 +62,11 @@ class PlotAgent:
             max_iterations (int): Maximum number of iterations for the agent to take.
             early_stopping_method (str): Method to use for early stopping.
             handle_parsing_errors (bool): Whether to handle parsing errors gracefully.
+            llm_temperature (float): Temperature for LLM sampling.
+            llm_timeout (int): Timeout in seconds for LLM calls.
+            llm_max_retries (int): Maximum retries for LLM calls.
+            debug (bool): Enable debug logging.
+            include_plot_image (bool): Generate PNG image of plots for PostHog analytics.
         """
         # Load .env if present, then require a valid API key
         load_dotenv()
@@ -89,6 +95,10 @@ class PlotAgent:
         self.posthog_client = None
         self.posthog_callback_handler = None
         posthog_enabled = os.getenv("POSTHOG_ENABLED", "false").lower() == "true"
+
+        # Enable PostHog multimodal capture if include_plot_image is True
+        if include_plot_image and posthog_enabled:
+            os.environ["_INTERNAL_LLMA_MULTIMODAL"] = "true"
 
         if posthog_enabled:
             if not POSTHOG_AVAILABLE:
@@ -169,6 +179,7 @@ class PlotAgent:
         self.max_iterations = max_iterations
         self.early_stopping_method = early_stopping_method
         self.handle_parsing_errors = handle_parsing_errors
+        self.include_plot_image = include_plot_image
 
     def set_df(self, df: pd.DataFrame, sql_query: Optional[str] = None):
         """
@@ -203,7 +214,9 @@ class PlotAgent:
         self.sql_query = sql_query
 
         # Initialize execution environment
-        self.execution_env = PlotAgentExecutionEnvironment(df)
+        self.execution_env = PlotAgentExecutionEnvironment(
+            df, include_plot_image=self.include_plot_image
+        )
 
         # Initialize the agent with tools
         self._initialize_agent()
@@ -523,6 +536,16 @@ class PlotAgent:
                         if self.debug:
                             self._logger.debug(f"execution result success={exec_result.get('success')} error={exec_result.get('error')!r}")
 
+        # Run verification step with image if enabled and figure exists
+        # This sends the plot image to the LLM for verification, which gets captured by PostHog
+        if (
+            self.include_plot_image
+            and self.posthog_callback_handler
+            and self.execution_env
+            and self.execution_env.fig is not None
+        ):
+            self._verify_plot_with_image(user_message)
+
         return ai_content if isinstance(ai_content, str) else str(ai_content)
 
     def get_figure(self):
@@ -543,6 +566,82 @@ class PlotAgent:
             return self.execution_env.plot_summary
         return None
 
+    def get_plot_image_base64(self) -> Optional[str]:
+        """Return the current plot image as base64-encoded data URI."""
+        if self.execution_env and self.execution_env.plot_image_base64:
+            return self.execution_env.plot_image_base64
+        return None
+
+    def _verify_plot_with_image(self, user_request: str) -> Optional[str]:
+        """
+        Send the generated plot image to the LLM for verification.
+
+        This step serves two purposes:
+        1. Verifies the plot matches the user's request
+        2. Captures the plot image in PostHog LLM traces (via multimodal message)
+
+        Args:
+            user_request: The original user request for context.
+
+        Returns:
+            The LLM's verification response, or None if verification fails.
+        """
+        plot_image = self.get_plot_image_base64()
+        if not plot_image:
+            return None
+
+        # Build multimodal message with the plot image
+        human_content: List[Union[dict, str]] = [
+            {
+                "type": "text",
+                "text": (
+                    f"Please verify this generated plot matches the user's request.\n\n"
+                    f"User request: {user_request}\n\n"
+                    f"Generated code:\n```python\n{self.generated_code or 'N/A'}\n```\n\n"
+                    f"Plot title: {self.get_plot_title() or 'N/A'}\n"
+                    f"Plot summary: {self.get_plot_summary() or 'N/A'}\n\n"
+                    f"Respond with a brief confirmation that the plot is correct, "
+                    f"or note any issues you see."
+                ),
+            },
+            {
+                "type": "image_url",
+                "image_url": {"url": plot_image},
+            },
+        ]
+
+        messages = [
+            SystemMessage(
+                content=(
+                    "You are a plot verification assistant. "
+                    "Review the generated plot image and verify it matches the user's request. "
+                    "Be concise in your response."
+                )
+            ),
+            HumanMessage(content=human_content),
+        ]
+
+        try:
+            # Build config with PostHog callback to capture this verification step
+            invoke_config = {}
+            if self.posthog_callback_handler:
+                invoke_config["callbacks"] = [self.posthog_callback_handler]
+
+            if self.debug:
+                self._logger.debug("Running plot verification with image")
+
+            # Call LLM directly (not through agent) for verification
+            response = self.llm.invoke(messages, config=invoke_config)
+            verification_result = response.content if hasattr(response, "content") else str(response)
+
+            if self.debug:
+                self._logger.debug(f"Plot verification result: {verification_result[:200]}...")
+
+            return verification_result
+        except Exception as e:
+            self._logger.warning(f"Plot verification failed: {e}")
+            return None
+
     def reset_conversation(self):
         """Reset the conversation history."""
         self.chat_history = []
@@ -551,3 +650,4 @@ class PlotAgent:
             self.execution_env.fig = None
             self.execution_env.plot_title = None
             self.execution_env.plot_summary = None
+            self.execution_env.plot_image_base64 = None

@@ -9,12 +9,15 @@ Security features:
   • Enforce a 60 second timeout via signal.alarm
 """
 import ast
+import base64
 import builtins
+import logging
 import signal
 import threading
 import traceback
 from io import StringIO
 import contextlib
+from typing import Optional
 
 import pandas as pd
 import numpy as np
@@ -111,11 +114,17 @@ class PlotAgentExecutionEnvironment:
         "__import__": _safe_import,
     }
 
-    def __init__(self, df: pd.DataFrame):
+    def __init__(self, df: pd.DataFrame, include_plot_image: bool = False):
         """
         Initialize the execution environment with a dataframe.
+
+        Args:
+            df: The pandas dataframe to use for plotting.
+            include_plot_image: If True, generate a PNG image of the plot after execution.
         """
         self.df = df
+        self.include_plot_image = include_plot_image
+        self._logger = logging.getLogger("plot_agent.execution")
         # Base namespace for both globals & locals
         self._base_ns = {
             "__builtins__": self._SAFE_BUILTINS,
@@ -130,6 +139,28 @@ class PlotAgentExecutionEnvironment:
         self.fig = None
         self.plot_title = None
         self.plot_summary = None
+        self.plot_image_base64 = None
+
+    def _generate_plot_png(self, fig, width: int = 800, height: int = 600) -> Optional[str]:
+        """
+        Generate PNG as base64 data URI from a Plotly figure.
+
+        Args:
+            fig: The Plotly figure to convert.
+            width: Image width in pixels.
+            height: Image height in pixels.
+
+        Returns:
+            Base64-encoded data URI string, or None if generation fails.
+        """
+        try:
+            import plotly.io as pio
+            img_bytes = pio.to_image(fig, format='png', width=width, height=height)
+            b64 = base64.b64encode(img_bytes).decode('utf-8')
+            return f"data:image/png;base64,{b64}"
+        except Exception as e:
+            self._logger.warning(f"Failed to generate plot PNG: {e}")
+            return None
 
     def _validate_ast(self, node: ast.AST):
         """
@@ -244,12 +275,17 @@ class PlotAgentExecutionEnvironment:
         fig = ns.get("fig")
         plot_title = ns.get("plot_title")
         plot_summary = ns.get("plot_summary")
-        
+
         # Store the variables
         self.fig = fig
         self.plot_title = plot_title
         self.plot_summary = plot_summary
-        
+
+        # Generate PNG if enabled and figure exists
+        self.plot_image_base64 = None
+        if self.include_plot_image and fig is not None:
+            self.plot_image_base64 = self._generate_plot_png(fig)
+
         # Validate required variables
         missing_vars = []
         if fig is None:
@@ -291,6 +327,7 @@ class PlotAgentExecutionEnvironment:
             "fig": fig,
             "plot_title": plot_title,
             "plot_summary": plot_summary,
+            "plot_image_base64": self.plot_image_base64,
             "output": "Code executed successfully. 'fig', 'plot_title', and 'plot_summary' objects were created.",
             "error": "",
             "success": True,
